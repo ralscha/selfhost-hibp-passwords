@@ -1,0 +1,147 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<groupId>ch.rasc.hibppasswords</groupId>
+	<artifactId>query</artifactId>
+	<packaging>jar</packaging>
+	<version>1.0-SNAPSHOT</version>
+
+	<description>Query library accessing a self hosted Have I Been Pwned passwords Xodus database</description>
+	<inceptionYear>2019</inceptionYear>
+	<name>hibppasswords-query</name>
+	<url>https://github.com/ralscha/selfhost-hibp-passwords</url>
+
+	<developers>
+		<developer>
+			<name>Ralph Schaer</name>
+			<email>ralphschaer@gmail.com</email>
+		</developer>
+	</developers>
+
+	<licenses>
+		<license>
+			<name>Apache 2</name>
+			<url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+			<distribution>repo</distribution>
+		</license>
+	</licenses>
+
+	<issueManagement>
+		<system>GitHub</system>
+		<url>https://github.com/ralscha/selfhost-hibp-passwords/issues</url>
+	</issueManagement>
+
+	<scm>
+		<connection>scm:git@github.com:ralscha/selfhost-hibp-passwords.git</connection>
+		<developerConnection>scm:git@github.com:ralscha/selfhost-hibp-passwords.git</developerConnection>
+		<url>https://github.com/ralscha/selfhost-hibp-passwords.git</url>
+	</scm>
+
+	<properties>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<maven.compiler.target>11</maven.compiler.target>
+		<maven.compiler.source>11</maven.compiler.source>
+	</properties>
+
+
+	<dependencies>
+		<dependency>
+			<groupId>org.jetbrains.xodus</groupId>
+			<artifactId>xodus-environment</artifactId>
+			<version>1.3.0</version>
+		</dependency>
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<artifactId>slf4j-api</artifactId>
+			<version>1.7.26</version>
+		</dependency>		
+	</dependencies>
+
+
+	<build>
+		<plugins>
+
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-source-plugin</artifactId>
+				<version>3.0.1</version>
+				<executions>
+					<execution>
+						<id>attach-sources</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>jar-no-fork</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<version>2.22.1</version>
+			</plugin>
+
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-jar-plugin</artifactId>
+				<version>3.1.0</version>
+				<configuration>
+					<archive>
+						<manifestEntries>
+							<Automatic-Module-Name>ch.rasc.xodusqueue</Automatic-Module-Name>
+						</manifestEntries>
+					</archive>
+				</configuration>
+			</plugin>
+
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-javadoc-plugin</artifactId>
+				<version>3.0.1</version>
+				<configuration>
+					<additionalOptions>-Xdoclint:none</additionalOptions>
+				</configuration>
+			</plugin>
+
+			<plugin>
+				<groupId>com.mycila</groupId>
+				<artifactId>license-maven-plugin</artifactId>
+				<version>3.0</version>
+				<configuration>
+					<header>${basedir}/../config/header.txt</header>
+					<properties>
+						<year>${project.inceptionYear}</year>
+						<currentYear>2019</currentYear>
+					</properties>
+					<excludes>
+						<exclude>**/*.xml</exclude>
+						<exclude>**/*.md</exclude>
+						<exclude>**/*.py</exclude>
+						<exclude>LICENSE</exclude>
+						<exclude>.travis.yml</exclude>
+						<exclude>**/.gitignore</exclude>
+						<exclude>.factorypath</exclude>
+						<exclude>.mvn/**/*</exclude>
+						<exclude>mvnw.cmd</exclude>
+						<exclude>mvnw</exclude>
+						<exclude>.apt_generated/**</exclude>
+						<exclude>.editorconfig</exclude>
+					</excludes>
+					<strictCheck>true</strictCheck>
+				</configuration>
+				<executions>
+					<execution>
+						<id>check-headers</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>check</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
+	</build>
+</project>
