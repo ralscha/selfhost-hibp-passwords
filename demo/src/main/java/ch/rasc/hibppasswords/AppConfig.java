@@ -22,5 +22,4 @@ public class AppConfig {
 		this.hibpDatabaseDir = hibpDatabaseDir;
 	}
 
-
 }

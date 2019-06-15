@@ -24,10 +24,16 @@ public class RangeQueryResult {
 		this.count = count;
 	}
 
+	/**
+	 * Last 35 charactres of the SHA-1 hash
+	 */
 	public String getHashSuffix() {
 		return this.hashSuffix;
 	}
 
+	/**
+	 * Number of times the password appeared in a data breach
+	 */
 	public int getCount() {
 		return this.count;
 	}

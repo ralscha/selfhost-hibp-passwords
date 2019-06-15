@@ -23,6 +23,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.function.Function;
 
+import org.slf4j.LoggerFactory;
+
 import jetbrains.exodus.ArrayByteIterable;
 import jetbrains.exodus.ByteIterable;
 import jetbrains.exodus.bindings.IntegerBinding;
@@ -32,6 +34,10 @@ import jetbrains.exodus.env.Environments;
 import jetbrains.exodus.env.Store;
 import jetbrains.exodus.env.StoreConfig;
 
+/**
+ * Utility class containing static helper methods to query a self hosted HIBP passwords
+ * database
+ */
 public abstract class HibpPasswordsQuery {
 
 	private static MessageDigest md;
@@ -40,16 +46,35 @@ public abstract class HibpPasswordsQuery {
 			md = MessageDigest.getInstance("SHA-1");
 		}
 		catch (NoSuchAlgorithmException e) {
-			e.printStackTrace();
+			LoggerFactory.getLogger(HibpPasswordsQuery.class)
+					.error("error getting SHA-1 instance", e);
 		}
 	}
 
+	/**
+	 * Checks if a given password is stored in the database
+	 *
+	 * @param databaseDirectory Directory of the xodus passwords database
+	 * @param password A password
+	 * @return number of times the password appeared in a data breach or <code>null</code>
+	 * if the password wasn't found in any of the Pwned Passwords loaded into Have I Been
+	 * Pwned
+	 */
 	public static Integer haveIBeenPwned(Path databaseDirectory, String password) {
 		try (Environment env = Environments.newInstance(databaseDirectory.toFile())) {
 			return haveIBeenPwned(env, password);
 		}
 	}
 
+	/**
+	 * Checks if a given password is stored in the database
+	 *
+	 * @param environment Xodus Environment instance
+	 * @param password A password
+	 * @return number of times the password appeared in a data breach or <code>null</code>
+	 * if the password wasn't found in any of the Pwned Passwords loaded into Have I Been
+	 * Pwned
+	 */
 	public static Integer haveIBeenPwned(Environment environment, String password) {
 		return environment.computeInReadonlyTransaction(txn -> {
 			Store store = environment.openStore("passwords",
@@ -64,26 +89,79 @@ public abstract class HibpPasswordsQuery {
 		});
 	}
 
+	/**
+	 * Implements the range query API of haveibeenpwned.com. <br>
+	 * <a href=
+	 * "https://haveibeenpwned.com/API/v2#SearchingPwnedPasswordsByRange">SearchingPwnedPasswordsByRange</a>
+	 *
+	 * Implements a k-Anonymity model that allows a password to be searched for by partial
+	 * hash. The method expects the first 5 characters of a SHA-1 hash (case-insensitive).
+	 *
+	 * When password hashes beginning with the same first 5 characters are found in the
+	 * database the method returns a list of these hashes, only including the suffix (last
+	 * 35 characters) with the count of how many times it appears in the data set.
+	 *
+	 * The consumer of the method then has to search the returned list for the presence of
+	 * the source hash.
+	 *
+	 * @param databaseDirectory Directory of the xodus passwords database
+	 * @param first5CharactersOfSHA1Hash The first 5 characters of a SHA-1 hash
+	 * @return list of hashes that start with the same 5 characters
+	 */
 	public static List<RangeQueryResult> haveIBeenPwnedRange(Path databaseDirectory,
 			String first5CharactersOfSHA1Hash) {
+
+		if (first5CharactersOfSHA1Hash == null
+				|| first5CharactersOfSHA1Hash.length() != 5) {
+			throw new IllegalArgumentException(
+					"The method expects the first 5 characters of a SHA-1 hash as parameter");
+		}
+
 		try (Environment env = Environments.newInstance(databaseDirectory.toFile())) {
 			return haveIBeenPwnedRange(env, first5CharactersOfSHA1Hash);
 		}
 	}
 
+	/**
+	 * Implements the range query API of haveibeenpwned.com. <br>
+	 * <a href=
+	 * "https://haveibeenpwned.com/API/v2#SearchingPwnedPasswordsByRange">SearchingPwnedPasswordsByRange</a>
+	 *
+	 * Implements a k-Anonymity model that allows a password to be searched for by partial
+	 * hash. The method expects the first 5 characters of a SHA-1 hash (case-insensitive).
+	 *
+	 * When password hashes beginning with the same first 5 characters are found in the
+	 * database the method returns a list of these hashes, only including the suffix (last
+	 * 35 characters) with the count of how many times it appears in the data set.
+	 *
+	 * The consumer of the method then has to search the returned list for the presence of
+	 * the source hash.
+	 *
+	 * @param environment Xodus Environment instance
+	 * @param first5CharactersOfSHA1Hash The first 5 characters of a SHA-1 hash
+	 * @return list of hashes that start with the same 5 characters
+	 */
 	public static List<RangeQueryResult> haveIBeenPwnedRange(Environment environment,
 			String first5CharactersOfSHA1Hash) {
+
+		if (first5CharactersOfSHA1Hash == null
+				|| first5CharactersOfSHA1Hash.length() != 5) {
+			throw new IllegalArgumentException(
+					"The method expects the first 5 characters of a SHA-1 hash as parameter");
+		}
+
 		return environment.computeInReadonlyTransaction(txn -> {
 
-			String first5CharactersOfSHA1HashUpperCase = first5CharactersOfSHA1Hash.toUpperCase();
+			String first5CharactersOfSHA1HashUpperCase = first5CharactersOfSHA1Hash
+					.toUpperCase();
 			List<RangeQueryResult> queryResult = new ArrayList<>();
 
 			Store store = environment.openStore("passwords",
 					StoreConfig.WITHOUT_DUPLICATES_WITH_PREFIXING, txn);
 			try (Cursor cursor = store.openCursor(txn)) {
 
-				String padded = first5CharactersOfSHA1HashUpperCase
-						+ new String(new char[40 - first5CharactersOfSHA1HashUpperCase.length()])
+				String padded = first5CharactersOfSHA1HashUpperCase + new String(
+						new char[40 - first5CharactersOfSHA1HashUpperCase.length()])
 								.replace('\0', '0');
 				byte[] keyBytes = hexStringToByteArray(padded);
 				ByteIterable key = new ArrayByteIterable(keyBytes);
