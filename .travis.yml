@@ -1,0 +1,16 @@
+sudo: false
+language: java
+jdk:
+  - openjdk11
+
+env:
+  global:
+  - SONATYPE_USERNAME=ralscha23
+  
+after_success:
+- python addsettings.py
+- cd query
+- ../mvn clean deploy --settings ~/.m2/mySettings.xml
+cache:
+  directories:
+  - "$HOME/.m2"
