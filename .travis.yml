@@ -6,11 +6,13 @@ jdk:
 env:
   global:
   - SONATYPE_USERNAME=ralscha23
+
+before_script: cd query
   
 after_success:
-- python addsettings.py
-- cd query
-- ../mvn clean deploy --settings ~/.m2/mySettings.xml
+- python ../addsettings.py
+- ../mvnw clean deploy --settings ~/.m2/mySettings.xml
+
 cache:
   directories:
   - "$HOME/.m2"
