@@ -15,6 +15,7 @@
  */
 package ch.rasc.hibppasswords.query;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -52,7 +53,7 @@ public abstract class HibpPasswordsQuery {
 	}
 
 	/**
-	 * Checks if a given password is stored in the database
+	 * Checks if a given plain text password is stored in the database
 	 *
 	 * @param databaseDirectory Directory of the xodus passwords database
 	 * @param password Plain text password
@@ -67,7 +68,7 @@ public abstract class HibpPasswordsQuery {
 	}
 
 	/**
-	 * Checks if a given password is stored in the database
+	 * Checks if a given plain text password is stored in the database
 	 *
 	 * @param environment Xodus Environment instance
 	 * @param password Plain text password
@@ -76,24 +77,12 @@ public abstract class HibpPasswordsQuery {
 	 * Pwned
 	 */
 	public static Integer haveIBeenPwnedPlain(Environment environment, String password) {
-		
-		return haveIBeenPwned(environment, sha1hash);
-		
-		return environment.computeInReadonlyTransaction(txn -> {
-			Store store = environment.openStore("passwords",
-					StoreConfig.WITHOUT_DUPLICATES_WITH_PREFIXING, txn);
-			byte[] passwordBytes = md.digest(password.getBytes());
-			ByteIterable key = new ArrayByteIterable(passwordBytes);
-			ByteIterable bi = store.get(txn, key);
-			if (bi != null) {
-				return IntegerBinding.compressedEntryToInt(bi);
-			}
-			return null;
-		});
+		return haveIBeenPwned(environment,
+				md.digest(password.getBytes(StandardCharsets.UTF_8)));
 	}
-	
+
 	/**
-	 * Checks if a given password is stored in the database
+	 * Checks if a given password hash is stored in the database
 	 *
 	 * @param databaseDirectory Directory of the xodus passwords database
 	 * @param password SHA-1 hash of a password (case-insensitive)
@@ -108,7 +97,7 @@ public abstract class HibpPasswordsQuery {
 	}
 
 	/**
-	 * Checks if a given password is stored in the database
+	 * Checks if a given password hash is stored in the database
 	 *
 	 * @param environment Xodus Environment instance
 	 * @param password SHA-1 hash of a password (case-insensitive)
@@ -117,22 +106,21 @@ public abstract class HibpPasswordsQuery {
 	 * Pwned
 	 */
 	public static Integer haveIBeenPwnedSha1(Environment environment, String sha1hash) {
-		byte[] passwordBytes = hexStringToByteArray(sha1hash.toUpperCase());
-		return haveIBeenPwned(environment, sha1hash);
-	}	
+		return haveIBeenPwned(environment, hexStringToByteArray(sha1hash.toUpperCase()));
+	}
 
 	private static Integer haveIBeenPwned(Environment environment, byte[] key) {
 		return environment.computeInReadonlyTransaction(txn -> {
 			Store store = environment.openStore("passwords",
-					StoreConfig.WITHOUT_DUPLICATES_WITH_PREFIXING, txn);			
+					StoreConfig.WITHOUT_DUPLICATES_WITH_PREFIXING, txn);
 			ByteIterable bi = store.get(txn, new ArrayByteIterable(key));
 			if (bi != null) {
 				return IntegerBinding.compressedEntryToInt(bi);
 			}
 			return null;
 		});
-	}	
-	
+	}
+
 	/**
 	 * Implements the range query API of haveibeenpwned.com. <br>
 	 * <a href=
