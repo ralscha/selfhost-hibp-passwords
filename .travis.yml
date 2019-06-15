@@ -7,10 +7,11 @@ env:
   global:
   - SONATYPE_USERNAME=ralscha23
 
-before_script: cd query
+before_install: cd query
   
 after_success:
-- python ../addsettings.py
+- python ./addsettings.py
+- cd query
 - ../mvnw clean deploy --settings ~/.m2/mySettings.xml
 
 cache:
