@@ -18,11 +18,12 @@ package ch.rasc.hibppasswords.importer;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.concurrent.Callable;
+import java.nio.file.Paths;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.jetbrains.annotations.NotNull;
 
+import ch.rasc.hibppasswords.query.HibpPasswordsQuery;
 import jetbrains.exodus.ArrayByteIterable;
 import jetbrains.exodus.ByteIterable;
 import jetbrains.exodus.bindings.IntegerBinding;
@@ -31,48 +32,74 @@ import jetbrains.exodus.env.Environments;
 import jetbrains.exodus.env.Store;
 import jetbrains.exodus.env.StoreConfig;
 import jetbrains.exodus.env.Transaction;
-import picocli.CommandLine;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
 
-@Command(description = "Import a HIBP passwords text file into a local Xodus database",
-		name = "java -jar hibp-passwords-importer.jar", mixinStandardHelpOptions = true,
-		version = "1.0.0")
-public class HibpPasswordsImporter implements Callable<Integer> {
-
-	@Option(defaultValue = "pwned-passwords-sha1-ordered-by-hash-v4.txt", required = true,
-			names = { "-i", "--input" },
-			description = "Path to the uncompressed hibp passwords text file")
-	private Path hibpPasswordsFile;
-
-	@Option(defaultValue = "hibp-passwords", required = true,
-			names = { "-d", "--database" },
-			description = "Directory where the Xodus database will be stored. Directory will be created if it does not exist.")
-	private Path databasePath;
+public class HibpPasswordsImporter {
 
 	public static void main(String[] args) throws Exception {
-		int exitCode = new CommandLine(new HibpPasswordsImporter()).execute(args);
-		System.exit(exitCode);
+
+		if (args.length == 3) {
+			if (args[0].equalsIgnoreCase("import")) {
+				Path hibpPasswordsFile = Paths.get(args[1]);
+				Path databaseDir = Paths.get(args[2]);
+
+				int exitCode = HibpPasswordsImporter.doImport(hibpPasswordsFile,
+						databaseDir);
+				System.exit(exitCode);
+			}
+			else if (args[0].equalsIgnoreCase("query-plain")) {
+				Integer result = HibpPasswordsQuery
+						.haveIBeenPwnedPlain(Paths.get(args[2]), args[1]);
+				if (result != null) {
+					System.out.println(result);
+				}
+				else {
+					System.out.println("not found");
+				}
+			}
+			else if (args[0].equalsIgnoreCase("query-sha1")) {
+				Integer result = HibpPasswordsQuery.haveIBeenPwnedSha1(Paths.get(args[2]),
+						args[1]);
+				if (result != null) {
+					System.out.println(result);
+				}
+				else {
+					System.out.println("not found");
+				}
+			}
+		}
+		else {
+			printUsage();
+			System.exit(2);
+		}
 	}
 
-	@Override
-	public Integer call() throws Exception {
+	private static void printUsage() {
+		System.out.println(
+				"java -jar hibp-passwords-importer.jar import <hibp passwords txt file>  <database directory>");
+		System.out.println(
+				"java -jar hibp-passwords-importer.jar query-plain <plain text password>  <database directory>");
+		System.out.println(
+				"java -jar hibp-passwords-importer.jar query-sha1 <sha1>  <database directory>");
+	}
 
-		if (!Files.exists(this.hibpPasswordsFile)) {
+	private static int doImport(Path hibpPasswordsFile, Path databaseDir)
+			throws Exception {
+
+		if (!Files.exists(hibpPasswordsFile)) {
 			System.out.println("hibp passwords text file does not exist");
-			return CommandLine.ExitCode.SOFTWARE;
+			return 1;
 		}
 
-		Files.createDirectories(this.databasePath);
+		Files.createDirectories(databaseDir);
 
 		System.out.println("Importing ...");
-		try (Environment env = Environments.newInstance(this.databasePath.toFile())) {
+		try (Environment env = Environments.newInstance(databaseDir.toFile())) {
 			return env.computeInExclusiveTransaction((@NotNull final Transaction txn) -> {
 				Store store = env.openStore("passwords",
 						StoreConfig.WITHOUT_DUPLICATES_WITH_PREFIXING, txn);
 				try {
 					AtomicLong counter = new AtomicLong();
-					Files.lines(this.hibpPasswordsFile).forEach(line -> {
+					Files.lines(hibpPasswordsFile).forEach(line -> {
 						long c = counter.incrementAndGet();
 						if (c % 10_000_000 == 0) {
 							System.out.printf("imported: %d \n", c);
@@ -85,9 +112,9 @@ public class HibpPasswordsImporter implements Callable<Integer> {
 				}
 				catch (IOException e) {
 					e.printStackTrace();
-					return CommandLine.ExitCode.SOFTWARE;
+					return 1;
 				}
-				return CommandLine.ExitCode.OK;
+				return 0;
 			});
 		}
 	}
