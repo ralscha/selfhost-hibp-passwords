@@ -55,14 +55,14 @@ public abstract class HibpPasswordsQuery {
 	 * Checks if a given password is stored in the database
 	 *
 	 * @param databaseDirectory Directory of the xodus passwords database
-	 * @param password A password
+	 * @param password Plain text password
 	 * @return number of times the password appeared in a data breach or <code>null</code>
 	 * if the password wasn't found in any of the Pwned Passwords loaded into Have I Been
 	 * Pwned
 	 */
-	public static Integer haveIBeenPwned(Path databaseDirectory, String password) {
+	public static Integer haveIBeenPwnedPlain(Path databaseDirectory, String password) {
 		try (Environment env = Environments.newInstance(databaseDirectory.toFile())) {
-			return haveIBeenPwned(env, password);
+			return haveIBeenPwnedPlain(env, password);
 		}
 	}
 
@@ -70,12 +70,15 @@ public abstract class HibpPasswordsQuery {
 	 * Checks if a given password is stored in the database
 	 *
 	 * @param environment Xodus Environment instance
-	 * @param password A password
+	 * @param password Plain text password
 	 * @return number of times the password appeared in a data breach or <code>null</code>
 	 * if the password wasn't found in any of the Pwned Passwords loaded into Have I Been
 	 * Pwned
 	 */
-	public static Integer haveIBeenPwned(Environment environment, String password) {
+	public static Integer haveIBeenPwnedPlain(Environment environment, String password) {
+		
+		return haveIBeenPwned(environment, sha1hash);
+		
 		return environment.computeInReadonlyTransaction(txn -> {
 			Store store = environment.openStore("passwords",
 					StoreConfig.WITHOUT_DUPLICATES_WITH_PREFIXING, txn);
@@ -88,7 +91,48 @@ public abstract class HibpPasswordsQuery {
 			return null;
 		});
 	}
+	
+	/**
+	 * Checks if a given password is stored in the database
+	 *
+	 * @param databaseDirectory Directory of the xodus passwords database
+	 * @param password SHA-1 hash of a password (case-insensitive)
+	 * @return number of times the password appeared in a data breach or <code>null</code>
+	 * if the password wasn't found in any of the Pwned Passwords loaded into Have I Been
+	 * Pwned
+	 */
+	public static Integer haveIBeenPwnedSha1(Path databaseDirectory, String sha1hash) {
+		try (Environment env = Environments.newInstance(databaseDirectory.toFile())) {
+			return haveIBeenPwnedSha1(env, sha1hash);
+		}
+	}
 
+	/**
+	 * Checks if a given password is stored in the database
+	 *
+	 * @param environment Xodus Environment instance
+	 * @param password SHA-1 hash of a password (case-insensitive)
+	 * @return number of times the password appeared in a data breach or <code>null</code>
+	 * if the password wasn't found in any of the Pwned Passwords loaded into Have I Been
+	 * Pwned
+	 */
+	public static Integer haveIBeenPwnedSha1(Environment environment, String sha1hash) {
+		byte[] passwordBytes = hexStringToByteArray(sha1hash.toUpperCase());
+		return haveIBeenPwned(environment, sha1hash);
+	}	
+
+	private static Integer haveIBeenPwned(Environment environment, byte[] key) {
+		return environment.computeInReadonlyTransaction(txn -> {
+			Store store = environment.openStore("passwords",
+					StoreConfig.WITHOUT_DUPLICATES_WITH_PREFIXING, txn);			
+			ByteIterable bi = store.get(txn, new ArrayByteIterable(key));
+			if (bi != null) {
+				return IntegerBinding.compressedEntryToInt(bi);
+			}
+			return null;
+		});
+	}	
+	
 	/**
 	 * Implements the range query API of haveibeenpwned.com. <br>
 	 * <a href=

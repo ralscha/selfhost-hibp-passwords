@@ -10,8 +10,7 @@ env:
 before_install: cd query
   
 after_success:
-- python ./addsettings.py
-- cd query
+- python ../addsettings.py
 - ../mvnw clean deploy --settings ~/.m2/mySettings.xml
 
 cache:
