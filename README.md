@@ -65,7 +65,7 @@ dependencies {
 
 ### Command Line
 
-The import tool also allows you to query the database 
+The local database can be queried with the import tool.
   - With plain text password:    
     `java -jar hibp-passwords-importer.jar query-plain 123456 <path_to_database>`
 

@@ -35,12 +35,29 @@ public class Application {
 		}
 	}
 
-	@GetMapping(path = "/range/{first5hashchars}", produces = "text/plain")
-	public String range(@PathVariable("first5hashchars") String first5hashchars) {
-
-		return HibpPasswordsQuery.haveIBeenPwnedRange(this.environment, first5hashchars)
+	@GetMapping(path = "/range/{first5HashChars}", produces = "text/plain")
+	public String range(@PathVariable("first5HashChars") String first5HashChars) {
+		return HibpPasswordsQuery.haveIBeenPwnedRange(this.environment, first5HashChars)
 				.stream().map(HibpPasswordsQuery.stringResultMapper())
 				.collect(Collectors.joining("\n"));
+	}
 
+	@GetMapping(path = "/plain/{plainTextPassword}", produces = "text/plain")
+	public String plain(@PathVariable("plainTextPassword") String plainTextPassword) {
+		Integer count = HibpPasswordsQuery.haveIBeenPwnedPlain(this.environment,
+				plainTextPassword);
+		if (count != null) {
+			return count.toString();
+		}
+		return "0";
+	}
+
+	@GetMapping(path = "/sha1/{sha1Hash}", produces = "text/plain")
+	public String sha1(@PathVariable("sha1Hash") String sha1Hash) {
+		Integer count = HibpPasswordsQuery.haveIBeenPwnedSha1(this.environment, sha1Hash);
+		if (count != null) {
+			return count.toString();
+		}
+		return "0";
 	}
 }
