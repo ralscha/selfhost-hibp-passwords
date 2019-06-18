@@ -34,8 +34,8 @@
 	</issueManagement>
 
 	<scm>
-		<connection>scm:git@github.com:ralscha/selfhost-hibp-passwords.git</connection>
-		<developerConnection>scm:git@github.com:ralscha/selfhost-hibp-passwords.git</developerConnection>
+		<connection>scm:git:git@github.com:ralscha/selfhost-hibp-passwords.git</connection>
+		<developerConnection>scm:git:git@github.com:ralscha/selfhost-hibp-passwords.git</developerConnection>
 		<url>https://github.com/ralscha/selfhost-hibp-passwords.git</url>
 	</scm>
 
