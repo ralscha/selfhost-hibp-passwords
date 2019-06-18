@@ -33,7 +33,8 @@ necessary import steps automatically:
       Download the file with torrent, only download it with the Cloudflare direct link if torrent does not work.
    3. Download [importer](https://github.com/ralscha/selfhost-hibp-passwords/releases/download/query-1.0.0/hibp-passwords-importer.jar)
    4. Extract passwords file with 7z
-   5. Run import tool: `java -jar hibp-passwords-importer.jar import pwned-passwords-sha1-ordered-by-hash-v4.txt hibp-passwords`
+   5. Run import tool:     
+      `java -jar hibp-passwords-importer.jar import pwned-passwords-sha1-ordered-by-hash-v4.txt hibp-passwords`
    6. Delete passwords file. Both files (7z and txt) are no longer needed.
 
 
