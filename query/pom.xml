@@ -12,7 +12,7 @@
 	<groupId>ch.rasc.hibppasswords</groupId>
 	<artifactId>query</artifactId>
 	<packaging>jar</packaging>
-	<version>1.0.1-SNAPSHOT</version>
+	<version>1.0.0-SNAPSHOT</version>
 
 	<description>Query library accessing a self hosted Have I Been Pwned passwords Xodus database</description>
 	<inceptionYear>2019</inceptionYear>
