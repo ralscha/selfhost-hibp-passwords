@@ -1,0 +1,35 @@
+name: test
+
+on: [push]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v1
+    - name: Set up Java 13
+      uses: actions/setup-java@v1
+      with:
+        java-version: 13
+    - name: Build with Java 13
+      working-directory: ./query
+      run: ../mvnw -B clean test --file pom.xml        
+    - name: Set up Java 11
+      uses: actions/setup-java@v1
+      with:
+        java-version: 11
+    - name: Build with Java 11
+      working-directory: ./query    
+      run: ../mvnw -B clean test --file pom.xml    
+    - name: Set up Java 9
+      uses: actions/setup-java@v1
+      with:
+        java-version: 9
+    - name: Build with Java 9
+      working-directory: ./query    
+      run: ../mvnw -B clean test --file pom.xml
+    - name: Deploy to Sonatype
+      working-directory: ./query    
+      run: ../mvnw -B -Drepo.username=${{secrets.SONATYPE_USERNAME}} -Drepo.password=${{secrets.SONATYPE_PASSWORD}} clean deploy -DskipTests=true --settings mySettings.xml
