@@ -23,9 +23,9 @@ necessary import steps automatically:
 
    1. Download Java 11 or newer. JRE is sufficient
        - https://adoptopenjdk.net/
-       - https://jdk.java.net/12/
+       - https://jdk.java.net/13/
        - https://aws.amazon.com/corretto/
-       - https://www.azul.com/downloads/zulu/
+       - https://www.azul.com/downloads/zulu-community/
 
    2. Download the Pwned Passwords list. The import tool requires the **SHA-1 ordered by hash** version.       
        - https://haveibeenpwned.com/Passwords    
