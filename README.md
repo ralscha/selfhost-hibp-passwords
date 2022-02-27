@@ -22,10 +22,10 @@ necessary import steps automatically:
 ### Manual
 
    1. Download Java 11 or newer. JRE is sufficient
-       - https://adoptopenjdk.net/
-       - https://jdk.java.net/13/
+       - https://adoptium.net/
+       - https://jdk.java.net/17/
        - https://aws.amazon.com/corretto/
-       - https://www.azul.com/downloads/zulu-community/
+       - https://www.azul.com/downloads/?package=jdk
 
    2. Download the Pwned Passwords list. The import tool requires the **SHA-1 ordered by hash** version.       
        - https://haveibeenpwned.com/Passwords    
@@ -34,7 +34,7 @@ necessary import steps automatically:
    3. Download [importer](https://github.com/ralscha/selfhost-hibp-passwords/releases/download/query-1.0.0/hibp-passwords-importer.jar)
    4. Extract passwords file with 7z
    5. Run import tool:     
-      `java -jar hibp-passwords-importer.jar import pwned-passwords-sha1-ordered-by-hash-v4.txt hibp-passwords`
+      `java -jar hibp-passwords-importer.jar import pwned-passwords-sha1-ordered-by-hash-v8.txt hibp-passwords`
    6. Delete passwords file. Both files (7z and txt) are no longer needed.
 
 
