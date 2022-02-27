@@ -21,7 +21,7 @@ necessary import steps automatically:
 
 ### Manual
 
-   1. Download Java 11 or newer. JRE is sufficient
+   1. Download Java 17 or newer. JRE is sufficient
        - https://adoptium.net/
        - https://jdk.java.net/17/
        - https://aws.amazon.com/corretto/
