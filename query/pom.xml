@@ -130,7 +130,6 @@
 					<header>${basedir}/../config/header.txt</header>
 					<properties>
 						<year>${project.inceptionYear}</year>
-						<currentYear>2019</currentYear>
 					</properties>
 					<excludes>
 						<exclude>**/*.xml</exclude>

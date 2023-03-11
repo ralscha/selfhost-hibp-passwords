@@ -1,5 +1,5 @@
 /**
- * Copyright 2019-2019 the original author or authors.
+ * Copyright the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.jetbrains.annotations.NotNull;
@@ -39,10 +41,10 @@ public class HibpPasswordsImporter {
 
 		if (args.length == 3) {
 			if (args[0].equalsIgnoreCase("import")) {
-				Path hibpPasswordsFile = Paths.get(args[1]);
+				Path hibpHashesDirectory = Paths.get(args[1]);
 				Path databaseDir = Paths.get(args[2]);
 
-				int exitCode = HibpPasswordsImporter.doImport(hibpPasswordsFile,
+				int exitCode = HibpPasswordsImporter.doImport(hibpHashesDirectory,
 						databaseDir);
 				System.exit(exitCode);
 			}
@@ -75,18 +77,18 @@ public class HibpPasswordsImporter {
 
 	private static void printUsage() {
 		System.out.println(
-				"java -jar hibp-passwords-importer.jar import <hibp passwords txt file>  <database directory>");
+				"java -jar hibp-passwords-importer.jar import <hibp hashes directory>  <database directory>");
 		System.out.println(
 				"java -jar hibp-passwords-importer.jar query-plain <plain text password>  <database directory>");
 		System.out.println(
 				"java -jar hibp-passwords-importer.jar query-sha1 <sha1>  <database directory>");
 	}
 
-	private static int doImport(Path hibpPasswordsFile, Path databaseDir)
+	private static int doImport(Path hibpHashesDirectory, Path databaseDir)
 			throws Exception {
 
-		if (!Files.exists(hibpPasswordsFile)) {
-			System.out.println("hibp passwords text file does not exist");
+		if (!Files.exists(hibpHashesDirectory)) {
+			System.out.println("hibp directory does not exist");
 			return 1;
 		}
 
@@ -98,15 +100,31 @@ public class HibpPasswordsImporter {
 				Store store = env.openStore("passwords",
 						StoreConfig.WITHOUT_DUPLICATES_WITH_PREFIXING, txn);
 				try {
-					AtomicLong counter = new AtomicLong();
-					Files.lines(hibpPasswordsFile).forEach(line -> {
-						long c = counter.incrementAndGet();
-						if (c % 10_000_000 == 0) {
-							System.out.printf("imported: %d \n", c);
-							txn.flush();
+
+
+			        final AtomicLong importCounter = new AtomicLong(0L);
+			        final AtomicLong fileCounter = new AtomicLong(0L);
+
+					List<String> hashFiles = listAllFiles(hibpHashesDirectory);
+					int totalFiles = hashFiles.size();
+					for (String hashFile : hashFiles) {
+						Path inputFile = Paths.get(hashFile);
+						try (var linesReader = Files.lines(inputFile)) {
+							linesReader.forEach(line -> {
+								long c = importCounter.incrementAndGet();
+					              if (c > 10_000_000) {
+					                txn.flush();
+					                System.out.println(
+					                    "Processed no of files " + fileCounter.get() + " of " + totalFiles);
+					                importCounter.set(0L);
+					              }
+					              String hashPrefix = hashFile.substring(0, hashFile.lastIndexOf("."));
+								importLine(store, txn, hashPrefix, line);
+							});
 						}
-						importLine(store, txn, line);
-					});
+						
+						fileCounter.incrementAndGet();
+					}
 
 					txn.commit();
 				}
@@ -119,12 +137,12 @@ public class HibpPasswordsImporter {
 		}
 	}
 
-	private static void importLine(Store store, Transaction txn, String line) {
-		String sha1 = line.substring(0, 40);
-		int count = Integer.parseInt(line.substring(41).trim());
+	private static void importLine(Store store, Transaction txn, String prefix, String line) {
+	    String sha1 = line.substring(0, 35);
+	    int count = Integer.parseInt(line.substring(36).trim());
 
-		ByteIterable key = new ArrayByteIterable(hexStringToByteArray(sha1));
-		store.putRight(txn, key, IntegerBinding.intToCompressedEntry(count));
+	    ByteIterable key = new ArrayByteIterable(hexStringToByteArray(prefix + sha1));
+	    store.putRight(txn, key, IntegerBinding.intToCompressedEntry(count));
 	}
 
 	private static byte[] hexStringToByteArray(String s) {
@@ -134,6 +152,23 @@ public class HibpPasswordsImporter {
 					+ Character.digit(s.charAt(i + 1), 16));
 		}
 		return data;
+	}
+
+	private static List<String> listAllFiles(Path inputDir) {
+		List<String> files = new ArrayList<>();
+		try (var walker = Files.walk(inputDir)) {
+			walker.forEach(filePath -> {
+				if (Files.isRegularFile(filePath)) {
+					files.add(filePath.toString());
+				}
+			});
+		}
+		catch (IOException e) {
+			e.printStackTrace();
+		}
+
+		files.sort(String::compareTo);
+		return files;
 	}
 
 }

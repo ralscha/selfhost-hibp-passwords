@@ -6,7 +6,7 @@
 	<groupId>ch.rasc.hibppasswords</groupId>
 	<artifactId>importer</artifactId>
 	<packaging>jar</packaging>
-	<version>1.0.0</version>
+	<version>1.1.0</version>
 
 	<description>Have I Been Pwned passwords Xodus database importer</description>
 	<inceptionYear>2019</inceptionYear>
@@ -101,7 +101,6 @@
 					<header>${basedir}/../config/header.txt</header>
 					<properties>
 						<year>${project.inceptionYear}</year>
-						<currentYear>2019</currentYear>
 					</properties>
 					<excludes>
 						<exclude>**/*.xml</exclude>
