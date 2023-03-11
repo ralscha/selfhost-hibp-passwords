@@ -101,28 +101,28 @@ public class HibpPasswordsImporter {
 						StoreConfig.WITHOUT_DUPLICATES_WITH_PREFIXING, txn);
 				try {
 
-
-			        final AtomicLong importCounter = new AtomicLong(0L);
-			        final AtomicLong fileCounter = new AtomicLong(0L);
+					final AtomicLong importCounter = new AtomicLong(0L);
+					final AtomicLong fileCounter = new AtomicLong(0L);
 
 					List<String> hashFiles = listAllFiles(hibpHashesDirectory);
 					int totalFiles = hashFiles.size();
 					for (String hashFile : hashFiles) {
-						Path inputFile = Paths.get(hashFile);
+						Path inputFile = hibpHashesDirectory.resolve(Paths.get(hashFile));
 						try (var linesReader = Files.lines(inputFile)) {
 							linesReader.forEach(line -> {
 								long c = importCounter.incrementAndGet();
-					              if (c > 10_000_000) {
-					                txn.flush();
-					                System.out.println(
-					                    "Processed no of files " + fileCounter.get() + " of " + totalFiles);
-					                importCounter.set(0L);
-					              }
-					              String hashPrefix = hashFile.substring(0, hashFile.lastIndexOf("."));
+								if (c > 10_000_000) {
+									txn.flush();
+									System.out.println("Processed no of files "
+											+ fileCounter.get() + " of " + totalFiles);
+									importCounter.set(0L);
+								}
+								String hashPrefix = hashFile.substring(0,
+										hashFile.lastIndexOf("."));
 								importLine(store, txn, hashPrefix, line);
 							});
 						}
-						
+
 						fileCounter.incrementAndGet();
 					}
 
@@ -137,12 +137,12 @@ public class HibpPasswordsImporter {
 		}
 	}
 
-	private static void importLine(Store store, Transaction txn, String prefix, String line) {
-	    String sha1 = line.substring(0, 35);
-	    int count = Integer.parseInt(line.substring(36).trim());
-
-	    ByteIterable key = new ArrayByteIterable(hexStringToByteArray(prefix + sha1));
-	    store.putRight(txn, key, IntegerBinding.intToCompressedEntry(count));
+	private static void importLine(Store store, Transaction txn, String prefix,
+			String line) {
+		String sha1 = line.substring(0, 35);
+		int count = Integer.parseInt(line.substring(36).trim());
+		ByteIterable key = new ArrayByteIterable(hexStringToByteArray(prefix + sha1));
+		store.putRight(txn, key, IntegerBinding.intToCompressedEntry(count));
 	}
 
 	private static byte[] hexStringToByteArray(String s) {
@@ -159,7 +159,7 @@ public class HibpPasswordsImporter {
 		try (var walker = Files.walk(inputDir)) {
 			walker.forEach(filePath -> {
 				if (Files.isRegularFile(filePath)) {
-					files.add(filePath.toString());
+					files.add(filePath.getFileName().toString());
 				}
 			});
 		}
