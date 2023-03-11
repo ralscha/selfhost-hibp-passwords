@@ -1,25 +1,12 @@
 # Self-host Have I Been Pwned Passwords
 
-Tool for importing the Have I Been Pwned Passwords list into a local [Jetbrain Xodus database](https://github.com/JetBrains/xodus). Java library for quering the database. 
+Tool for importing the Have I Been Pwned Passwords list into a local [Jetbrain Xodus database](https://github.com/JetBrains/xodus). Java library for querying the database. 
 
 
 ## Prerequisites 
-   - Sufficient drive storage. About 38GB during import, 15GB for normal operation.
+   - Sufficient drive storage. About 57GB during import, 24GB for normal operation.
 
 ## Import
-
-
-### With batch
-
-See [`importpasswords.sh`](https://github.com/ralscha/selfhost-hibp-passwords/blob/master/importpasswords.sh), a bash script for Debian/Ubuntu that runs all the
-necessary import steps automatically:
-   - Download passwords file
-   - Download Java
-   - Download importer
-   - Import passwords file
-   - Delete all unnecessary files and directories afterwards
-
-### Manual
 
    1. Download Java 17 or newer. JRE is sufficient
        - https://adoptium.net/
@@ -27,29 +14,25 @@ necessary import steps automatically:
        - https://aws.amazon.com/corretto/
        - https://www.azul.com/downloads/?package=jdk
 
-   2. Download the Pwned Passwords list. The import tool requires the **SHA-1 ordered by hash** version.       
-       - https://haveibeenpwned.com/Passwords    
+   2. Download the Pwned Passwords. Either use the [official downloader](https://github.com/HaveIBeenPwned/PwnedPasswordsDownloader) or [my downloader](https://github.com/ralscha/hibp-passwords-downloader) written in Go. The importer expects the hashes in individual files. 
 
-      Download the file with torrent, only download it with the Cloudflare direct link if torrent does not work.
-   3. Download [importer](https://github.com/ralscha/selfhost-hibp-passwords/releases/download/query-1.0.0/hibp-passwords-importer.jar)
-   4. Extract passwords file with 7z
-   5. Run import tool:     
-      `java -jar hibp-passwords-importer.jar import pwned-passwords-sha1-ordered-by-hash-v8.txt hibp-passwords`
-   6. Delete passwords file. Both files (7z and txt) are no longer needed.
+   3. Download [importer](https://github.com/ralscha/selfhost-hibp-passwords/releases/download/importer-1.1.0/hibp-passwords-importer.jar)
+   4. Run the import tool. Point it to the directory that contains the downloaded hash files        
+      `java -jar hibp-passwords-importer.jar import <hashesdir> <database_directory_name>`
 
 
 ## Query
 
 ### Library
 
-Add library to your project
+Add library to your project.
 
 ```
 <!-- Maven -->
 <dependency>
-	<groupId>ch.rasc.hibppasswords</groupId>
-	<artifactId>query</artifactId>
-	<version>1.0.0</version>
+   <groupId>ch.rasc.hibppasswords</groupId>
+   <artifactId>query</artifactId>
+   <version>1.0.0</version>
 </dependency>
 ```      
 
@@ -60,7 +43,7 @@ dependencies {
 }
 ````
 
-An application can query the database with either a plain text password or SHA-1 hash. Both
+An application can query the database with a plain text password or SHA-1 hash. Both
 methods return either how many times a string or SHA-1 hash appears in the data set, or `null` if
 the given password is not found.
 
@@ -78,8 +61,7 @@ count = HibpPasswordsQuery.haveIBeenPwnedSha1(db, "FFFFFFBFAD0B653BDAC698485C6D1
 
 List<RangeQueryResult> result = HibpPasswordsQuery.haveIBeenPwnedRange(db, "FFFFF");
 ```
-These three methods open and close the database for each call. To speed up queries, an
-application can instantiate the the Xodus environment once and pass it as first argument. 
+These three methods open and close the database for each call. To speed up queries, an application can instantiate the Xodus environment once and pass it as the first argument. 
 
 ```java
 import jetbrains.exodus.env.Environment;
@@ -110,7 +92,7 @@ The local database can be queried with the import tool.
 
 ## HTTP Demo
 
-The repository hosts a Spring Boot demo with thee HTTP endpoints. 
+The repository hosts a Spring Boot demo with the HTTP endpoints. 
 
 ```sh
 $ git clone https://github.com/ralscha/selfhost-hibp-passwords.git
