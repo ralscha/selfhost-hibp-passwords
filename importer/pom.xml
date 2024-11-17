@@ -94,7 +94,7 @@
 			<plugin>
 				<groupId>com.mycila</groupId>
 				<artifactId>license-maven-plugin</artifactId>
-				<version>4.5</version>
+				<version>4.6</version>
 				<configuration>
 					<header>${basedir}/../config/header.txt</header>
 					<properties>
