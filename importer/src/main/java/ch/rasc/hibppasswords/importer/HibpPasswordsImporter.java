@@ -19,9 +19,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Stream;
 
 import org.jetbrains.annotations.NotNull;
 
@@ -39,39 +40,41 @@ public class HibpPasswordsImporter {
 
 	public static void main(String[] args) throws Exception {
 
-		if (args.length == 3) {
-			if (args[0].equalsIgnoreCase("import")) {
-				Path hibpHashesDirectory = Paths.get(args[1]);
-				Path databaseDir = Paths.get(args[2]);
+		if (args.length != 3) {
+			printUsage();
+			System.exit(2);
+		}
 
-				int exitCode = HibpPasswordsImporter.doImport(hibpHashesDirectory,
-						databaseDir);
-				System.exit(exitCode);
-			}
-			else if (args[0].equalsIgnoreCase("query-plain")) {
-				Integer result = HibpPasswordsQuery
-						.haveIBeenPwnedPlain(Paths.get(args[2]), args[1]);
-				if (result != null) {
-					System.out.println(result);
-				}
-				else {
-					System.out.println("not found");
-				}
-			}
-			else if (args[0].equalsIgnoreCase("query-sha1")) {
-				Integer result = HibpPasswordsQuery.haveIBeenPwnedSha1(Paths.get(args[2]),
-						args[1]);
-				if (result != null) {
-					System.out.println(result);
-				}
-				else {
-					System.out.println("not found");
-				}
-			}
+		if (args[0].equalsIgnoreCase("import")) {
+			Path hibpHashesDirectory = Paths.get(args[1]);
+			Path databaseDir = Paths.get(args[2]);
+
+			int exitCode = HibpPasswordsImporter.doImport(hibpHashesDirectory,
+					databaseDir);
+			System.exit(exitCode);
+		}
+		else if (args[0].equalsIgnoreCase("query-plain")) {
+			Integer result = HibpPasswordsQuery
+					.haveIBeenPwnedPlain(Paths.get(args[2]), args[1]);
+			printQueryResult(result);
+		}
+		else if (args[0].equalsIgnoreCase("query-sha1")) {
+			Integer result = HibpPasswordsQuery.haveIBeenPwnedSha1(Paths.get(args[2]),
+					args[1]);
+			printQueryResult(result);
 		}
 		else {
 			printUsage();
 			System.exit(2);
+		}
+	}
+
+	private static void printQueryResult(Integer result) {
+		if (result != null) {
+			System.out.println(result);
+		}
+		else {
+			System.out.println("not found");
 		}
 	}
 
@@ -104,10 +107,10 @@ public class HibpPasswordsImporter {
 					final AtomicLong importCounter = new AtomicLong(0L);
 					final AtomicLong fileCounter = new AtomicLong(0L);
 
-					List<String> hashFiles = listAllFiles(hibpHashesDirectory);
+					List<Path> hashFiles = listAllFiles(hibpHashesDirectory);
 					int totalFiles = hashFiles.size();
-					for (String hashFile : hashFiles) {
-						Path inputFile = hibpHashesDirectory.resolve(Paths.get(hashFile));
+					for (Path inputFile : hashFiles) {
+						String hashPrefix = getHashPrefix(inputFile);
 						try (var linesReader = Files.lines(inputFile)) {
 							linesReader.forEach(line -> {
 								long c = importCounter.incrementAndGet();
@@ -117,8 +120,6 @@ public class HibpPasswordsImporter {
 											+ fileCounter.get() + " of " + totalFiles);
 									importCounter.set(0L);
 								}
-								String hashPrefix = hashFile.substring(0,
-										hashFile.lastIndexOf("."));
 								importLine(store, txn, hashPrefix, line);
 							});
 						}
@@ -135,6 +136,18 @@ public class HibpPasswordsImporter {
 				return 0;
 			});
 		}
+	}
+
+	private static String getHashPrefix(Path inputFile) {
+		String fileName = inputFile.getFileName().toString();
+		int extensionIndex = fileName.lastIndexOf('.');
+		String prefix = extensionIndex == -1 ? fileName : fileName.substring(0, extensionIndex);
+		if (prefix.length() != 5) {
+			throw new IllegalArgumentException(
+					"Hash file name must start with the 5-character SHA-1 prefix: "
+							+ inputFile);
+		}
+		return prefix.toUpperCase(Locale.ROOT);
 	}
 
 	private static void importLine(Store store, Transaction txn, String prefix,
@@ -154,21 +167,10 @@ public class HibpPasswordsImporter {
 		return data;
 	}
 
-	private static List<String> listAllFiles(Path inputDir) {
-		List<String> files = new ArrayList<>();
-		try (var walker = Files.walk(inputDir)) {
-			walker.forEach(filePath -> {
-				if (Files.isRegularFile(filePath)) {
-					files.add(filePath.getFileName().toString());
-				}
-			});
+	private static List<Path> listAllFiles(Path inputDir) throws IOException {
+		try (Stream<Path> walker = Files.walk(inputDir)) {
+			return walker.filter(Files::isRegularFile).sorted().toList();
 		}
-		catch (IOException e) {
-			e.printStackTrace();
-		}
-
-		files.sort(String::compareTo);
-		return files;
 	}
 
 }

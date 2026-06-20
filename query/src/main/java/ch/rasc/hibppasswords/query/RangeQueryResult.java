@@ -25,7 +25,7 @@ public class RangeQueryResult {
 	}
 
 	/**
-	 * Last 35 charactres of the SHA-1 hash
+	 * Last 35 characters of the SHA-1 hash
 	 */
 	public String getHashSuffix() {
 		return this.hashSuffix;

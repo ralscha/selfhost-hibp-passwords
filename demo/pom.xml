@@ -58,7 +58,7 @@
     <dependency>
       <groupId>ch.rasc.hibppasswords</groupId>
       <artifactId>query</artifactId>
-      <version>1.0.0</version>
+      <version>1.0.1-SNAPSHOT</version>
     </dependency>
     <dependency>
       <groupId>org.slf4j</groupId>

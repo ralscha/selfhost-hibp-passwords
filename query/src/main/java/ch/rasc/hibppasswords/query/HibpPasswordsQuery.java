@@ -22,9 +22,8 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.Function;
-
-import org.slf4j.LoggerFactory;
 
 import jetbrains.exodus.ArrayByteIterable;
 import jetbrains.exodus.ByteIterable;
@@ -41,14 +40,14 @@ import jetbrains.exodus.env.StoreConfig;
  */
 public abstract class HibpPasswordsQuery {
 
-	private static MessageDigest md;
-	static {
+	private static final char[] HEX_ARRAY = "0123456789ABCDEF".toCharArray();
+
+	private static MessageDigest sha1Digest() {
 		try {
-			md = MessageDigest.getInstance("SHA-1");
+			return MessageDigest.getInstance("SHA-1");
 		}
 		catch (NoSuchAlgorithmException e) {
-			LoggerFactory.getLogger(HibpPasswordsQuery.class)
-					.error("error getting SHA-1 instance", e);
+			throw new IllegalStateException("SHA-1 MessageDigest is not available", e);
 		}
 	}
 
@@ -78,14 +77,14 @@ public abstract class HibpPasswordsQuery {
 	 */
 	public static Integer haveIBeenPwnedPlain(Environment environment, String password) {
 		return haveIBeenPwned(environment,
-				md.digest(password.getBytes(StandardCharsets.UTF_8)));
+				sha1Digest().digest(password.getBytes(StandardCharsets.UTF_8)));
 	}
 
 	/**
 	 * Checks if a given password hash is stored in the database
 	 *
 	 * @param databaseDirectory Directory of the xodus passwords database
-	 * @param password SHA-1 hash of a password (case-insensitive)
+	 * @param sha1hash SHA-1 hash of a password (case-insensitive)
 	 * @return number of times the password appeared in a data breach or <code>null</code>
 	 * if the password wasn't found in any of the Pwned Passwords loaded into Have I Been
 	 * Pwned
@@ -100,13 +99,14 @@ public abstract class HibpPasswordsQuery {
 	 * Checks if a given password hash is stored in the database
 	 *
 	 * @param environment Xodus Environment instance
-	 * @param password SHA-1 hash of a password (case-insensitive)
+	 * @param sha1hash SHA-1 hash of a password (case-insensitive)
 	 * @return number of times the password appeared in a data breach or <code>null</code>
 	 * if the password wasn't found in any of the Pwned Passwords loaded into Have I Been
 	 * Pwned
 	 */
 	public static Integer haveIBeenPwnedSha1(Environment environment, String sha1hash) {
-		return haveIBeenPwned(environment, hexStringToByteArray(sha1hash.toUpperCase()));
+		return haveIBeenPwned(environment,
+				hexStringToByteArray(normalizeSha1Hash(sha1hash)));
 	}
 
 	private static Integer haveIBeenPwned(Environment environment, byte[] key) {
@@ -143,12 +143,6 @@ public abstract class HibpPasswordsQuery {
 	public static List<RangeQueryResult> haveIBeenPwnedRange(Path databaseDirectory,
 			String first5CharactersOfSHA1Hash) {
 
-		if (first5CharactersOfSHA1Hash == null
-				|| first5CharactersOfSHA1Hash.length() != 5) {
-			throw new IllegalArgumentException(
-					"The method expects the first 5 characters of a SHA-1 hash as parameter");
-		}
-
 		try (Environment env = Environments.newInstance(databaseDirectory.toFile())) {
 			return haveIBeenPwnedRange(env, first5CharactersOfSHA1Hash);
 		}
@@ -176,25 +170,17 @@ public abstract class HibpPasswordsQuery {
 	public static List<RangeQueryResult> haveIBeenPwnedRange(Environment environment,
 			String first5CharactersOfSHA1Hash) {
 
-		if (first5CharactersOfSHA1Hash == null
-				|| first5CharactersOfSHA1Hash.length() != 5) {
-			throw new IllegalArgumentException(
-					"The method expects the first 5 characters of a SHA-1 hash as parameter");
-		}
+		String hashPrefix = normalizeSha1Prefix(first5CharactersOfSHA1Hash);
 
 		return environment.computeInReadonlyTransaction(txn -> {
 
-			String first5CharactersOfSHA1HashUpperCase = first5CharactersOfSHA1Hash
-					.toUpperCase();
 			List<RangeQueryResult> queryResult = new ArrayList<>();
 
 			Store store = environment.openStore("passwords",
 					StoreConfig.WITHOUT_DUPLICATES_WITH_PREFIXING, txn);
 			try (Cursor cursor = store.openCursor(txn)) {
 
-				String padded = first5CharactersOfSHA1HashUpperCase + new String(
-						new char[40 - first5CharactersOfSHA1HashUpperCase.length()])
-								.replace('\0', '0');
+				String padded = hashPrefix + "0".repeat(40 - hashPrefix.length());
 				byte[] keyBytes = hexStringToByteArray(padded);
 				ByteIterable key = new ArrayByteIterable(keyBytes);
 				final ByteIterable v = cursor.getSearchKeyRange(key);
@@ -203,7 +189,7 @@ public abstract class HibpPasswordsQuery {
 					String hex = bytesToHex(
 							Arrays.copyOf(unsafeBytes, cursor.getKey().getLength()));
 
-					if (hex.startsWith(first5CharactersOfSHA1HashUpperCase)) {
+					if (hex.startsWith(hashPrefix)) {
 						queryResult.add(new RangeQueryResult(hex.substring(5),
 								IntegerBinding.compressedEntryToInt(cursor.getValue())));
 
@@ -211,7 +197,7 @@ public abstract class HibpPasswordsQuery {
 							unsafeBytes = cursor.getKey().getBytesUnsafe();
 							hex = bytesToHex(Arrays.copyOf(unsafeBytes,
 									cursor.getKey().getLength()));
-							if (hex.startsWith(first5CharactersOfSHA1HashUpperCase)) {
+							if (hex.startsWith(hashPrefix)) {
 								queryResult.add(new RangeQueryResult(hex.substring(5),
 										IntegerBinding.compressedEntryToInt(
 												cursor.getValue())));
@@ -228,7 +214,31 @@ public abstract class HibpPasswordsQuery {
 		});
 	}
 
-	private static byte[] hexStringToByteArray(String s) {
+	static String normalizeSha1Hash(String sha1hash) {
+		return normalizeHex(sha1hash, 40, "SHA-1 hash");
+	}
+
+	static String normalizeSha1Prefix(String first5CharactersOfSHA1Hash) {
+		return normalizeHex(first5CharactersOfSHA1Hash, 5,
+				"first 5 characters of a SHA-1 hash");
+	}
+
+	private static String normalizeHex(String value, int expectedLength, String label) {
+		if (value == null || value.length() != expectedLength) {
+			throw new IllegalArgumentException(
+					"The method expects the " + label + " as parameter");
+		}
+
+		String upperCaseValue = value.toUpperCase(Locale.ROOT);
+		for (int i = 0; i < upperCaseValue.length(); i++) {
+			if (Character.digit(upperCaseValue.charAt(i), 16) == -1) {
+				throw new IllegalArgumentException(label + " must contain only hex digits");
+			}
+		}
+		return upperCaseValue;
+	}
+
+	static byte[] hexStringToByteArray(String s) {
 		byte[] data = new byte[20];
 		for (int i = 0; i < 40; i += 2) {
 			data[i / 2] = (byte) ((Character.digit(s.charAt(i), 16) << 4)
@@ -237,14 +247,12 @@ public abstract class HibpPasswordsQuery {
 		return data;
 	}
 
-	private final static char[] hexArray = "0123456789ABCDEF".toCharArray();
-
 	private static String bytesToHex(byte[] bytes) {
 		char[] hexChars = new char[bytes.length * 2];
 		for (int j = 0; j < bytes.length; j++) {
 			int v = bytes[j] & 0xFF;
-			hexChars[j * 2] = hexArray[v >>> 4];
-			hexChars[j * 2 + 1] = hexArray[v & 0x0F];
+			hexChars[j * 2] = HEX_ARRAY[v >>> 4];
+			hexChars[j * 2 + 1] = HEX_ARRAY[v & 0x0F];
 		}
 		return new String(hexChars);
 	}
