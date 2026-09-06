@@ -16,13 +16,16 @@
 package ch.rasc.hibppasswords.query;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.function.Function;
 
 import jetbrains.exodus.ArrayByteIterable;
@@ -30,17 +33,27 @@ import jetbrains.exodus.ByteIterable;
 import jetbrains.exodus.bindings.IntegerBinding;
 import jetbrains.exodus.env.Cursor;
 import jetbrains.exodus.env.Environment;
+import jetbrains.exodus.env.EnvironmentConfig;
 import jetbrains.exodus.env.Environments;
 import jetbrains.exodus.env.Store;
 import jetbrains.exodus.env.StoreConfig;
+import jetbrains.exodus.env.Transaction;
 
 /**
  * Utility class containing static helper methods to query a self hosted HIBP passwords
  * database
  */
-public abstract class HibpPasswordsQuery {
+public final class HibpPasswordsQuery {
 
-	private static final char[] HEX_ARRAY = "0123456789ABCDEF".toCharArray();
+	private static final HexFormat HEX_FORMAT = HexFormat.of().withUpperCase();
+
+	private static final String PASSWORDS_STORE = "passwords";
+
+	private static final StoreConfig PASSWORDS_STORE_CONFIG =
+			StoreConfig.WITHOUT_DUPLICATES_WITH_PREFIXING;
+
+	private HibpPasswordsQuery() {
+	}
 
 	private static MessageDigest sha1Digest() {
 		try {
@@ -61,7 +74,7 @@ public abstract class HibpPasswordsQuery {
 	 * Pwned
 	 */
 	public static Integer haveIBeenPwnedPlain(Path databaseDirectory, String password) {
-		try (Environment env = Environments.newInstance(databaseDirectory.toFile())) {
+		try (Environment env = openDatabase(databaseDirectory)) {
 			return haveIBeenPwnedPlain(env, password);
 		}
 	}
@@ -76,7 +89,8 @@ public abstract class HibpPasswordsQuery {
 	 * Pwned
 	 */
 	public static Integer haveIBeenPwnedPlain(Environment environment, String password) {
-		return haveIBeenPwned(environment,
+		Objects.requireNonNull(password, "password");
+		return haveIBeenPwned(Objects.requireNonNull(environment, "environment"),
 				sha1Digest().digest(password.getBytes(StandardCharsets.UTF_8)));
 	}
 
@@ -90,7 +104,7 @@ public abstract class HibpPasswordsQuery {
 	 * Pwned
 	 */
 	public static Integer haveIBeenPwnedSha1(Path databaseDirectory, String sha1hash) {
-		try (Environment env = Environments.newInstance(databaseDirectory.toFile())) {
+		try (Environment env = openDatabase(databaseDirectory)) {
 			return haveIBeenPwnedSha1(env, sha1hash);
 		}
 	}
@@ -105,14 +119,13 @@ public abstract class HibpPasswordsQuery {
 	 * Pwned
 	 */
 	public static Integer haveIBeenPwnedSha1(Environment environment, String sha1hash) {
-		return haveIBeenPwned(environment,
+		return haveIBeenPwned(Objects.requireNonNull(environment, "environment"),
 				hexStringToByteArray(normalizeSha1Hash(sha1hash)));
 	}
 
 	private static Integer haveIBeenPwned(Environment environment, byte[] key) {
 		return environment.computeInReadonlyTransaction(txn -> {
-			Store store = environment.openStore("passwords",
-					StoreConfig.WITHOUT_DUPLICATES_WITH_PREFIXING, txn);
+			Store store = openPasswordsStore(environment, txn);
 			ByteIterable bi = store.get(txn, new ArrayByteIterable(key));
 			if (bi != null) {
 				return IntegerBinding.compressedEntryToInt(bi);
@@ -124,7 +137,8 @@ public abstract class HibpPasswordsQuery {
 	/**
 	 * Implements the range query API of haveibeenpwned.com. <br>
 	 * <a href=
-	 * "https://haveibeenpwned.com/API/v2#SearchingPwnedPasswordsByRange">SearchingPwnedPasswordsByRange</a>
+	 * "https://haveibeenpwned.com/API/v3#PwnedPasswords">Searching Pwned
+	 * Passwords by range</a>
 	 *
 	 * Implements a k-Anonymity model that allows a password to be searched for by partial
 	 * hash. The method expects the first 5 characters of a SHA-1 hash (case-insensitive).
@@ -143,7 +157,7 @@ public abstract class HibpPasswordsQuery {
 	public static List<RangeQueryResult> haveIBeenPwnedRange(Path databaseDirectory,
 			String first5CharactersOfSHA1Hash) {
 
-		try (Environment env = Environments.newInstance(databaseDirectory.toFile())) {
+		try (Environment env = openDatabase(databaseDirectory)) {
 			return haveIBeenPwnedRange(env, first5CharactersOfSHA1Hash);
 		}
 	}
@@ -151,7 +165,8 @@ public abstract class HibpPasswordsQuery {
 	/**
 	 * Implements the range query API of haveibeenpwned.com. <br>
 	 * <a href=
-	 * "https://haveibeenpwned.com/API/v2#SearchingPwnedPasswordsByRange">SearchingPwnedPasswordsByRange</a>
+	 * "https://haveibeenpwned.com/API/v3#PwnedPasswords">Searching Pwned
+	 * Passwords by range</a>
 	 *
 	 * Implements a k-Anonymity model that allows a password to be searched for by partial
 	 * hash. The method expects the first 5 characters of a SHA-1 hash (case-insensitive).
@@ -170,14 +185,14 @@ public abstract class HibpPasswordsQuery {
 	public static List<RangeQueryResult> haveIBeenPwnedRange(Environment environment,
 			String first5CharactersOfSHA1Hash) {
 
+		Objects.requireNonNull(environment, "environment");
 		String hashPrefix = normalizeSha1Prefix(first5CharactersOfSHA1Hash);
 
 		return environment.computeInReadonlyTransaction(txn -> {
 
 			List<RangeQueryResult> queryResult = new ArrayList<>();
 
-			Store store = environment.openStore("passwords",
-					StoreConfig.WITHOUT_DUPLICATES_WITH_PREFIXING, txn);
+			Store store = openPasswordsStore(environment, txn);
 			try (Cursor cursor = store.openCursor(txn)) {
 
 				String padded = hashPrefix + "0".repeat(40 - hashPrefix.length());
@@ -214,6 +229,52 @@ public abstract class HibpPasswordsQuery {
 		});
 	}
 
+	/**
+	 * Opens an existing HIBP passwords database in read-only mode. The caller owns the
+	 * returned environment and must close it.
+	 *
+	 * @param databaseDirectory directory containing an imported HIBP database
+	 * @return a read-only Xodus environment
+	 * @throws IllegalArgumentException if the directory does not exist or does not
+	 * contain a passwords store
+	 */
+	public static Environment openDatabase(Path databaseDirectory) {
+		Objects.requireNonNull(databaseDirectory, "databaseDirectory");
+		Path normalizedDirectory = databaseDirectory.toAbsolutePath().normalize();
+		if (!Files.isDirectory(normalizedDirectory)) {
+			throw new IllegalArgumentException(
+					"HIBP database directory does not exist: " + normalizedDirectory);
+		}
+
+		EnvironmentConfig config = new EnvironmentConfig().setEnvIsReadonly(true);
+		Environment environment = Environments.newInstance(normalizedDirectory.toFile(),
+				config);
+		try {
+			boolean storeExists = environment.computeInReadonlyTransaction(
+					txn -> environment.storeExists(PASSWORDS_STORE, txn));
+			if (!storeExists) {
+				throw new IllegalArgumentException(
+						"Directory does not contain an HIBP passwords database: "
+								+ normalizedDirectory);
+			}
+			return environment;
+		}
+		catch (RuntimeException e) {
+			environment.close();
+			throw e;
+		}
+	}
+
+	private static Store openPasswordsStore(Environment environment,
+			Transaction transaction) {
+		if (!environment.storeExists(PASSWORDS_STORE, transaction)) {
+			throw new IllegalArgumentException(
+					"Xodus environment does not contain an HIBP passwords store");
+		}
+		return environment.openStore(PASSWORDS_STORE, PASSWORDS_STORE_CONFIG,
+				transaction);
+	}
+
 	static String normalizeSha1Hash(String sha1hash) {
 		return normalizeHex(sha1hash, 40, "SHA-1 hash");
 	}
@@ -239,26 +300,15 @@ public abstract class HibpPasswordsQuery {
 	}
 
 	static byte[] hexStringToByteArray(String s) {
-		byte[] data = new byte[20];
-		for (int i = 0; i < 40; i += 2) {
-			data[i / 2] = (byte) ((Character.digit(s.charAt(i), 16) << 4)
-					+ Character.digit(s.charAt(i + 1), 16));
-		}
-		return data;
+		return HEX_FORMAT.parseHex(s);
 	}
 
 	private static String bytesToHex(byte[] bytes) {
-		char[] hexChars = new char[bytes.length * 2];
-		for (int j = 0; j < bytes.length; j++) {
-			int v = bytes[j] & 0xFF;
-			hexChars[j * 2] = HEX_ARRAY[v >>> 4];
-			hexChars[j * 2 + 1] = HEX_ARRAY[v & 0x0F];
-		}
-		return new String(hexChars);
+		return HEX_FORMAT.formatHex(bytes);
 	}
 
-	public static Function<? super RangeQueryResult, ? extends String> stringResultMapper() {
-		return r -> r.getHashSuffix() + ":" + r.getCount();
+	public static Function<RangeQueryResult, String> stringResultMapper() {
+		return RangeQueryResult::toString;
 	}
 
 }

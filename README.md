@@ -28,9 +28,16 @@ On Windows:
 
 ## Import
 
-1. Download the Pwned Passwords. Either use the [official downloader](https://github.com/HaveIBeenPwned/PwnedPasswordsDownloader) or [hibp-passwords-downloader](https://github.com/ralscha/hibp-passwords-downloader). The importer expects the hashes in individual prefix files.
+1. Download the SHA-1 Pwned Passwords. Either use the [official downloader](https://github.com/HaveIBeenPwned/PwnedPasswordsDownloader) or [hibp-passwords-downloader](https://github.com/ralscha/hibp-passwords-downloader). The importer expects one file per 5-character hash prefix (for example, `7C4A8.txt`) with sorted `35_CHARACTER_SUFFIX:COUNT` lines.
+
+   The official downloader creates a single file by default, so disable its single-file mode:
+
+   ```sh
+   haveibeenpwned-downloader hashes -s false
+   ```
+
 2. Download [importer](https://github.com/ralscha/selfhost-hibp-passwords/releases/download/importer-1.1.0/hibp-passwords-importer.jar).
-3. Run the import tool and point it to the directory that contains the downloaded hash files.
+3. Run the import tool and point it to the directory that contains the downloaded hash files. The database directory must be empty and must not be inside the hashes directory.
 
 ```sh
 java -jar hibp-passwords-importer.jar import <hashesdir> <database_directory_name>
@@ -61,7 +68,7 @@ dependencies {
 An application can query the database with a plain text password or SHA-1 hash. Both methods return how many times a password appears in the data set, or `null` if the password is not found.
 
 `haveIBeenPwnedRange` implements the k-anonymity range-query model and searches by the first 5 characters of a SHA-1 hash:
-https://haveibeenpwned.com/API/v2#SearchingPwnedPasswordsByRange
+https://haveibeenpwned.com/API/v3#PwnedPasswords
 
 SHA-1 inputs are case-insensitive, but must contain valid hexadecimal characters and have the expected length: 40 characters for a full SHA-1 hash, 5 characters for a range query prefix.
 
@@ -90,11 +97,10 @@ import java.util.List;
 import ch.rasc.hibppasswords.query.HibpPasswordsQuery;
 import ch.rasc.hibppasswords.query.RangeQueryResult;
 import jetbrains.exodus.env.Environment;
-import jetbrains.exodus.env.Environments;
 
 Path db = Paths.get("..."); // Path to local database
 
-try (Environment environment = Environments.newInstance(db.toFile())) {
+try (Environment environment = HibpPasswordsQuery.openDatabase(db)) {
   Integer count = HibpPasswordsQuery.haveIBeenPwnedPlain(environment, "123456");
   count = HibpPasswordsQuery.haveIBeenPwnedSha1(environment, "FFFFFFBFAD0B653BDAC698485C6D105F3C3682B2");
 
@@ -111,9 +117,10 @@ The local database can also be queried with the import tool.
 ```sh
 java -jar hibp-passwords-importer.jar query-plain 123456 <path_to_database>
 java -jar hibp-passwords-importer.jar query-sha1 FFFFFFFEE791CBAC0F6305CAF0CEE06BBE131160 <path_to_database>
+java -jar hibp-passwords-importer.jar query-range FFFFF <path_to_database>
 ```
 
-The command-line queries print the breach count or `not found`.
+The plain-text and full-hash commands print the breach count or `not found`. The range command prints one `HASH_SUFFIX:COUNT` result per line.
 
 ## HTTP Demo
 
@@ -137,3 +144,5 @@ curl http://localhost:8080/plain/mypassword
 curl http://localhost:8080/sha1/7C4A8D7F20D435D1F9F7FFA96C28E216E98163
 13
 ```
+
+The demo binds to `127.0.0.1` by default and has no authentication. Set `server.address` explicitly only if you intend to expose it on another interface and protect it appropriately.

@@ -15,12 +15,14 @@
  */
 package ch.rasc.hibppasswords.query;
 
-public class RangeQueryResult {
+import java.util.Objects;
+
+public final class RangeQueryResult {
 	private final String hashSuffix;
 	private final int count;
 
 	public RangeQueryResult(String hashSuffix, int count) {
-		this.hashSuffix = hashSuffix;
+		this.hashSuffix = Objects.requireNonNull(hashSuffix, "hashSuffix");
 		this.count = count;
 	}
 
@@ -36,6 +38,28 @@ public class RangeQueryResult {
 	 */
 	public int getCount() {
 		return this.count;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj) {
+			return true;
+		}
+		if (!(obj instanceof RangeQueryResult other)) {
+			return false;
+		}
+		return this.count == other.count
+				&& this.hashSuffix.equals(other.hashSuffix);
+	}
+
+	@Override
+	public int hashCode() {
+		return Objects.hash(this.hashSuffix, this.count);
+	}
+
+	@Override
+	public String toString() {
+		return this.hashSuffix + ":" + this.count;
 	}
 
 }
