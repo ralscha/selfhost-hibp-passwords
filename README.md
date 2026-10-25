@@ -108,7 +108,7 @@ try (Environment environment = HibpPasswordsQuery.openDatabase(db)) {
 }
 ```
 
-See the [Spring Boot example](https://github.com/ralscha/selfhost-hibp-passwords/blob/master/demo/src/main/java/ch/rasc/hibppasswords/Application.java).
+See the [Spring Boot example](https://github.com/ralscha/selfhost-hibp-passwords/blob/main/demo/src/main/java/ch/rasc/hibppasswords/Application.java).
 
 ### Command Line
 
