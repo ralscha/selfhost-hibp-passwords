@@ -48,7 +48,7 @@ jobs:
             -DgenerateBackupPoms=false \
             -DprocessFromLocalAggregationRoot=false
 
-      - name: Build and test importer and query library
+      - name: Build and test importer
         run: ./mvnw -B -ntp -pl importer -am clean verify
 
       - name: Check executable JAR and generate checksum

@@ -16,6 +16,8 @@ Java downloads:
 
 ## Build
 
+The importer and demo use query library `1.0.1` from Maven Central.
+
 ```sh
 ./mvnw -B clean verify
 ```
@@ -35,7 +37,7 @@ git tag -a importer-1.2.0 -m "Importer 1.2.0"
 git push origin importer-1.2.0
 ```
 
-The workflow sets the importer version from the tag in its build checkout, builds and tests the importer together with the query library on Java 25, and publishes a GitHub release containing `hibp-passwords-importer.jar` and its `.sha256` checksum. It uses the built-in `GITHUB_TOKEN`; no additional secrets are required. Rerunning the workflow updates these assets on an existing release, subject to the repository's release immutability settings.
+The workflow sets the importer version from the tag in its build checkout, builds and tests the importer on Java 25 using the released query library from Maven Central, and publishes a GitHub release containing `hibp-passwords-importer.jar` and its `.sha256` checksum. It uses the built-in `GITHUB_TOKEN`; no additional secrets are required. Rerunning the workflow updates these assets on an existing release, subject to the repository's release immutability settings.
 
 The query library has its own version and is published to Maven Central manually. This workflow does not deploy Maven artifacts.
 
@@ -67,14 +69,14 @@ Add the library to your project.
 <dependency>
   <groupId>ch.rasc.hibppasswords</groupId>
   <artifactId>query</artifactId>
-  <version>1.1.0</version>
+  <version>1.0.1</version>
 </dependency>
 ```
 
 ```groovy
 // Gradle
 dependencies {
-  implementation 'ch.rasc.hibppasswords:query:1.1.0'
+  implementation 'ch.rasc.hibppasswords:query:1.0.1'
 }
 ```
 
