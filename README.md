@@ -67,14 +67,14 @@ Add the library to your project.
 <dependency>
   <groupId>ch.rasc.hibppasswords</groupId>
   <artifactId>query</artifactId>
-  <version>1.0.1-SNAPSHOT</version>
+  <version>1.1.0</version>
 </dependency>
 ```
 
 ```groovy
 // Gradle
 dependencies {
-  implementation 'ch.rasc.hibppasswords:query:1.0.1-SNAPSHOT'
+  implementation 'ch.rasc.hibppasswords:query:1.1.0'
 }
 ```
 
