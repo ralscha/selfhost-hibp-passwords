@@ -6,12 +6,12 @@
     <groupId>org.sonatype.oss</groupId>
     <artifactId>oss-parent</artifactId>
     <version>9</version>
-    <relativePath/>
+    <relativePath />
   </parent>
 
   <groupId>ch.rasc.hibppasswords</groupId>
   <artifactId>query</artifactId>
-  <version>1.0.1-SNAPSHOT</version>
+  <version>1.0.1</version>
   <packaging>jar</packaging>
   <name>hibppasswords-query</name>
 
@@ -37,7 +37,7 @@
   <scm>
     <connection>scm:git:git@github.com:ralscha/selfhost-hibp-passwords.git</connection>
     <developerConnection>scm:git:git@github.com:ralscha/selfhost-hibp-passwords.git</developerConnection>
-    <tag>HEAD</tag>
+    <tag>query-1.0.1</tag>
     <url>https://github.com/ralscha/selfhost-hibp-passwords.git</url>
   </scm>
 
