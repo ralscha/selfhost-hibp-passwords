@@ -29,6 +29,8 @@ import java.util.Locale;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import jetbrains.exodus.ArrayByteIterable;
 import jetbrains.exodus.bindings.IntegerBinding;
@@ -123,6 +125,53 @@ class HibpPasswordsQueryTest {
 			assertThrows(IllegalArgumentException.class, () -> HibpPasswordsQuery
 					.haveIBeenPwnedPlain(environment, "123456"));
 		}
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "\uff17C4A8", "7C4A\u0668", "\ufb00FFF", "7C4A ", "7C4AZ" })
+	void rejectsNonAsciiHexPrefixes(String prefix) {
+		assertThrows(IllegalArgumentException.class,
+				() -> HibpPasswordsQuery.normalizeSha1Prefix(prefix));
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "00000", "7C4A0", "7C4A8", "7C4AF", "FFFFF" })
+	void rangeQueryIncludesBothEndsOfPrefixAndExcludesAdjacentPrefixes(String prefix) {
+		Path database = this.tempDirectory.resolve("database");
+		String firstHash = prefix + "0".repeat(35);
+		String lastHash = prefix + "F".repeat(35);
+		try (Environment environment = Environments.newInstance(database.toFile())) {
+			environment.executeInTransaction(transaction -> {
+				Store store = environment.openStore("passwords",
+						StoreConfig.WITHOUT_DUPLICATES_WITH_PREFIXING, transaction);
+				store.put(transaction, new ArrayByteIterable(HexFormat.of().parseHex(firstHash)),
+						IntegerBinding.intToCompressedEntry(1));
+				store.put(transaction, new ArrayByteIterable(HexFormat.of().parseHex(lastHash)),
+						IntegerBinding.intToCompressedEntry(2));
+				int prefixNumber = Integer.parseInt(prefix, 16);
+				if (prefixNumber > 0) {
+					String previous = "%05X".formatted(prefixNumber - 1) + "F".repeat(35);
+					store.put(transaction, new ArrayByteIterable(HexFormat.of().parseHex(previous)),
+							IntegerBinding.intToCompressedEntry(3));
+				}
+				if (prefixNumber < 0xfffff) {
+					String next = "%05X".formatted(prefixNumber + 1) + "0".repeat(35);
+					store.put(transaction, new ArrayByteIterable(HexFormat.of().parseHex(next)),
+							IntegerBinding.intToCompressedEntry(4));
+				}
+			});
+		}
+		assertEquals(List.of(new RangeQueryResult("0".repeat(35), 1),
+				new RangeQueryResult("F".repeat(35), 2)),
+				HibpPasswordsQuery.haveIBeenPwnedRange(database, prefix.toLowerCase(Locale.ROOT)));
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "00000", "7C4A7", "7C4A9", "FFFFF" })
+	void missingRangeReturnsEmptyList(String prefix) {
+		Path database = this.tempDirectory.resolve("database");
+		createDatabase(database);
+		assertTrue(HibpPasswordsQuery.haveIBeenPwnedRange(database, prefix).isEmpty());
 	}
 
 	private static void createDatabase(Path database) {

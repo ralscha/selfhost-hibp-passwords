@@ -26,9 +26,22 @@ On Windows:
 .\mvnw.cmd -B clean verify
 ```
 
+### Importer releases
+
+The [importer release workflow](.github/workflows/importer-release.yml) runs when a tag named `importer-MAJOR.MINOR.PATCH` is pushed. Commit the release changes, including the workflow, then create and push the tag:
+
+```sh
+git tag -a importer-1.2.0 -m "Importer 1.2.0"
+git push origin importer-1.2.0
+```
+
+The workflow sets the importer version from the tag in its build checkout, builds and tests the importer together with the query library on Java 25, and publishes a GitHub release containing `hibp-passwords-importer.jar` and its `.sha256` checksum. It uses the built-in `GITHUB_TOKEN`; no additional secrets are required. Rerunning the workflow updates these assets on an existing release, subject to the repository's release immutability settings.
+
+The query library has its own version and is published to Maven Central manually. This workflow does not deploy Maven artifacts.
+
 ## Import
 
-1. Download the SHA-1 Pwned Passwords. Either use the [official downloader](https://github.com/HaveIBeenPwned/PwnedPasswordsDownloader) or [hibp-passwords-downloader](https://github.com/ralscha/hibp-passwords-downloader). The importer expects one file per 5-character hash prefix (for example, `7C4A8.txt`) with sorted `35_CHARACTER_SUFFIX:COUNT` lines.
+1. Download the SHA-1 Pwned Passwords. Either use the [official downloader](https://github.com/HaveIBeenPwned/PwnedPasswordsDownloader) or [hibp-passwords-downloader](https://github.com/ralscha/hibp-passwords-downloader). The importer expects one file per 5-character hash prefix (for example, `7C4A8.txt`) with sorted `35_CHARACTER_SUFFIX:COUNT` lines. Gzip files (`7C4A8.txt.gz` or `7C4A8.gz`) are read directly without extracting them first. Files may be in subdirectories, but each prefix must appear only once. Zero-count padding entries are ignored; positive-count hashes must be unique and sorted.
 
    The official downloader creates a single file by default, so disable its single-file mode:
 
@@ -36,8 +49,8 @@ On Windows:
    haveibeenpwned-downloader hashes -s false
    ```
 
-2. Download [importer](https://github.com/ralscha/selfhost-hibp-passwords/releases/download/importer-1.1.0/hibp-passwords-importer.jar).
-3. Run the import tool and point it to the directory that contains the downloaded hash files. The database directory must be empty and must not be inside the hashes directory.
+2. Download [importer 1.2.0](https://github.com/ralscha/selfhost-hibp-passwords/releases/download/importer-1.2.0/hibp-passwords-importer.jar), or build it with the build command above; the executable is `importer/target/hibp-passwords-importer.jar`.
+3. Run the import tool and point it to the directory that contains the downloaded hash files. The database directory must be empty.
 
 ```sh
 java -jar hibp-passwords-importer.jar import <hashesdir> <database_directory_name>
@@ -70,17 +83,16 @@ An application can query the database with a plain text password or SHA-1 hash. 
 `haveIBeenPwnedRange` implements the k-anonymity range-query model and searches by the first 5 characters of a SHA-1 hash:
 https://haveibeenpwned.com/API/v3#PwnedPasswords
 
-SHA-1 inputs are case-insensitive, but must contain valid hexadecimal characters and have the expected length: 40 characters for a full SHA-1 hash, 5 characters for a range query prefix.
+SHA-1 inputs are case-insensitive, but must contain ASCII hexadecimal characters (`0-9`, `A-F`, `a-f`) and have the expected length: 40 characters for a full SHA-1 hash, 5 characters for a range query prefix.
 
 ```java
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.List;
 
 import ch.rasc.hibppasswords.query.HibpPasswordsQuery;
 import ch.rasc.hibppasswords.query.RangeQueryResult;
 
-Path db = Paths.get("..."); // Path to local database
+Path db = Path.of("..."); // Path to local database
 Integer count = HibpPasswordsQuery.haveIBeenPwnedPlain(db, "123456");
 count = HibpPasswordsQuery.haveIBeenPwnedSha1(db, "FFFFFFBFAD0B653BDAC698485C6D105F3C3682B2");
 
@@ -91,14 +103,13 @@ These three methods open and close the database for each call. To speed up queri
 
 ```java
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.List;
 
 import ch.rasc.hibppasswords.query.HibpPasswordsQuery;
 import ch.rasc.hibppasswords.query.RangeQueryResult;
 import jetbrains.exodus.env.Environment;
 
-Path db = Paths.get("..."); // Path to local database
+Path db = Path.of("..."); // Path to local database
 
 try (Environment environment = HibpPasswordsQuery.openDatabase(db)) {
   Integer count = HibpPasswordsQuery.haveIBeenPwnedPlain(environment, "123456");
@@ -128,8 +139,9 @@ The repository contains a Spring Boot demo with HTTP endpoints.
 
 ```sh
 git clone https://github.com/ralscha/selfhost-hibp-passwords.git
-cd selfhost-hibp-passwords/demo
-JAVA_HOME=<path_to_jdk> ../mvnw spring-boot:run -Dspring-boot.run.arguments=--app.hibp-database-dir=<path_to_database>
+cd selfhost-hibp-passwords
+./mvnw -B clean verify
+java -jar demo/target/demo-1.0.0.jar --app.hibp-database-dir=<path_to_database>
 
 # in another shell
 
@@ -138,11 +150,15 @@ curl http://localhost:8080/range/7C4A8
 00AD0FC3FA522D0474F9A28FD478C06669D:1
 ...
 
-curl http://localhost:8080/plain/mypassword
+curl -H 'Content-Type: text/plain' --data-binary 'mypassword' http://localhost:8080/plain
 38621
 
 curl http://localhost:8080/sha1/7C4A8D7F20D435D1F9F7FFA96C28E216E98163
 13
 ```
+
+`POST /plain` accepts the exact UTF-8 password in its request body, including whitespace, slashes, and empty passwords. It avoids putting the password in the URL. `GET /plain/{password}` remains available for compatibility. Plaintext and full-hash responses include `Cache-Control: no-store`. Counts are `0` when absent; a missing range returns an empty body with HTTP 200. Invalid SHA-1 hashes and prefixes return HTTP 400.
+
+Prefer `/range/{prefix}` when clients should keep the full password and hash local.
 
 The demo binds to `127.0.0.1` by default and has no authentication. Set `server.address` explicitly only if you intend to expose it on another interface and protect it appropriately.

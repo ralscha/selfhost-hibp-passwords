@@ -1,16 +1,20 @@
 package ch.rasc.hibppasswords;
 
+import java.nio.charset.StandardCharsets;
 import java.util.stream.Collectors;
 
 import jakarta.annotation.PreDestroy;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import ch.rasc.hibppasswords.query.HibpPasswordsQuery;
@@ -44,27 +48,34 @@ public class Application {
 	}
 
 	@GetMapping(path = "/plain/{plainTextPassword}", produces = "text/plain")
-	public String plain(@PathVariable("plainTextPassword") String plainTextPassword) {
-		Integer count = HibpPasswordsQuery.haveIBeenPwnedPlain(this.environment,
-				plainTextPassword);
-		if (count != null) {
-			return count.toString();
-		}
-		return "0";
+	public ResponseEntity<String> plain(
+			@PathVariable("plainTextPassword") String plainTextPassword) {
+		return countResponse(HibpPasswordsQuery.haveIBeenPwnedPlain(this.environment,
+				plainTextPassword));
+	}
+
+	@PostMapping(path = "/plain", consumes = "text/plain", produces = "text/plain")
+	public ResponseEntity<String> plainPost(@RequestBody(required = false) byte[] password) {
+		String plainTextPassword = password == null ? ""
+				: new String(password, StandardCharsets.UTF_8);
+		return countResponse(HibpPasswordsQuery.haveIBeenPwnedPlain(this.environment,
+				plainTextPassword));
 	}
 
 	@GetMapping(path = "/sha1/{sha1Hash}", produces = "text/plain")
-	public String sha1(@PathVariable("sha1Hash") String sha1Hash) {
-		Integer count = HibpPasswordsQuery.haveIBeenPwnedSha1(this.environment, sha1Hash);
-		if (count != null) {
-			return count.toString();
-		}
-		return "0";
+	public ResponseEntity<String> sha1(@PathVariable("sha1Hash") String sha1Hash) {
+		return countResponse(HibpPasswordsQuery.haveIBeenPwnedSha1(this.environment,
+				sha1Hash));
+	}
+
+	private static ResponseEntity<String> countResponse(Integer count) {
+		return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+				.body(count != null ? count.toString() : "0");
 	}
 
 	@ExceptionHandler(IllegalArgumentException.class)
-	@ResponseStatus(HttpStatus.BAD_REQUEST)
-	public String invalidInput(IllegalArgumentException exception) {
-		return exception.getMessage();
+	public ResponseEntity<String> invalidInput(IllegalArgumentException exception) {
+		return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+				.cacheControl(CacheControl.noStore()).body(exception.getMessage());
 	}
 }

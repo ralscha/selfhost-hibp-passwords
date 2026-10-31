@@ -17,8 +17,11 @@ package ch.rasc.hibppasswords.importer;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -28,6 +31,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.stream.Stream;
+import java.util.zip.GZIPInputStream;
 
 import ch.rasc.hibppasswords.query.HibpPasswordsQuery;
 import ch.rasc.hibppasswords.query.RangeQueryResult;
@@ -87,7 +91,7 @@ public final class HibpPasswordsImporter {
 			}
 			return 0;
 		}
-		catch (IOException | IllegalArgumentException | ExodusException e) {
+		catch (IOException | UncheckedIOException | IllegalArgumentException | ExodusException e) {
 			err.println("Error: " + e.getMessage());
 			return 1;
 		}
@@ -111,9 +115,17 @@ public final class HibpPasswordsImporter {
 
 	static long importHashes(Path hibpHashesDirectory, Path databaseDirectory,
 			PrintStream out) throws IOException {
+		return importHashes(hibpHashesDirectory, databaseDirectory, out, FLUSH_INTERVAL);
+	}
+
+	static long importHashes(Path hibpHashesDirectory, Path databaseDirectory,
+			PrintStream out, long flushInterval) throws IOException {
 		Objects.requireNonNull(hibpHashesDirectory, "hibpHashesDirectory");
 		Objects.requireNonNull(databaseDirectory, "databaseDirectory");
 		Objects.requireNonNull(out, "out");
+		if (flushInterval <= 0) {
+			throw new IllegalArgumentException("Flush interval must be positive");
+		}
 
 		Path inputDirectory = hibpHashesDirectory.toAbsolutePath().normalize();
 		Path targetDirectory = databaseDirectory.toAbsolutePath().normalize();
@@ -121,6 +133,8 @@ public final class HibpPasswordsImporter {
 			throw new IllegalArgumentException(
 					"HIBP hashes directory does not exist: " + inputDirectory);
 		}
+		inputDirectory = inputDirectory.toRealPath();
+		targetDirectory = resolveRealPath(targetDirectory);
 		if (targetDirectory.startsWith(inputDirectory)
 				|| inputDirectory.startsWith(targetDirectory)) {
 			throw new IllegalArgumentException(
@@ -145,10 +159,16 @@ public final class HibpPasswordsImporter {
 		out.println("Importing " + hashFiles.size() + " hash files ...");
 		try (Environment environment = Environments
 				.newInstance(targetDirectory.toFile())) {
+			// Persist before importing: transaction.flush() commits intermediate batches.
+			environment.executeInExclusiveTransaction(transaction -> environment.openStore(
+					"import-in-progress", StoreConfig.WITHOUT_DUPLICATES, transaction));
 			try {
 				long imported = environment.computeInExclusiveTransaction(transaction -> {
 					try {
-						return importFiles(environment, transaction, hashFiles, out);
+						long count = importFiles(environment, transaction, hashFiles, out,
+								flushInterval);
+						environment.removeStore("import-in-progress", transaction);
+						return count;
 					}
 					catch (IOException e) {
 						throw new UncheckedIOException(e);
@@ -164,7 +184,7 @@ public final class HibpPasswordsImporter {
 	}
 
 	private static long importFiles(Environment environment, Transaction transaction,
-			List<HashFile> hashFiles, PrintStream out) throws IOException {
+			List<HashFile> hashFiles, PrintStream out, long flushInterval) throws IOException {
 		Store store = environment.openStore("passwords",
 				StoreConfig.WITHOUT_DUPLICATES_WITH_PREFIXING, transaction);
 		byte[] previousHash = null;
@@ -173,12 +193,16 @@ public final class HibpPasswordsImporter {
 		int processedFiles = 0;
 
 		for (HashFile hashFile : hashFiles) {
-			try (BufferedReader reader = Files.newBufferedReader(hashFile.path())) {
+			try (BufferedReader reader = openReader(hashFile.path())) {
 				String line;
 				long lineNumber = 0;
 				while ((line = reader.readLine()) != null) {
 					lineNumber++;
 					PasswordEntry entry = parseLine(hashFile, lineNumber, line);
+					// HIBP padding has count zero and is not a breached password.
+					if (entry.count() == 0) {
+						continue;
+					}
 					if (previousHash != null
 							&& Arrays.compareUnsigned(previousHash, entry.hash()) >= 0) {
 						throw invalidLine(hashFile, lineNumber,
@@ -190,7 +214,7 @@ public final class HibpPasswordsImporter {
 					imported++;
 					sinceLastFlush++;
 
-					if (sinceLastFlush == FLUSH_INTERVAL) {
+					if (sinceLastFlush == flushInterval) {
 						if (!transaction.flush()) {
 							throw new IllegalStateException(
 									"Could not flush the import transaction");
@@ -204,6 +228,20 @@ public final class HibpPasswordsImporter {
 			processedFiles++;
 		}
 		return imported;
+	}
+
+	private static BufferedReader openReader(Path path) throws IOException {
+		InputStream input = Files.newInputStream(path);
+		try {
+			InputStream decoded = path.getFileName().toString().endsWith(".gz")
+					? new GZIPInputStream(input) : input;
+			return new BufferedReader(new InputStreamReader(decoded,
+					StandardCharsets.UTF_8.newDecoder()));
+		}
+		catch (IOException | RuntimeException e) {
+			input.close();
+			throw e;
+		}
 	}
 
 	private static PasswordEntry parseLine(HashFile hashFile, long lineNumber,
@@ -260,6 +298,13 @@ public final class HibpPasswordsImporter {
 		}
 	}
 
+	private static Path resolveRealPath(Path path) throws IOException {
+		if (Files.exists(path) || path.getParent() == null) {
+			return path.toRealPath();
+		}
+		return resolveRealPath(path.getParent()).resolve(path.getFileName());
+	}
+
 	private static List<HashFile> listHashFiles(Path inputDirectory)
 			throws IOException {
 		try (Stream<Path> walker = Files.walk(inputDirectory)) {
@@ -273,6 +318,9 @@ public final class HibpPasswordsImporter {
 
 	private static String getHashPrefix(Path inputFile) {
 		String fileName = inputFile.getFileName().toString();
+		if (fileName.endsWith(".gz")) {
+			fileName = fileName.substring(0, fileName.length() - 3);
+		}
 		int extensionIndex = fileName.lastIndexOf('.');
 		String prefix = extensionIndex == -1 ? fileName
 				: fileName.substring(0, extensionIndex);
@@ -281,15 +329,14 @@ public final class HibpPasswordsImporter {
 					"Hash file name must be a 5-character SHA-1 prefix: "
 							+ inputFile);
 		}
-		String normalizedPrefix = prefix.toUpperCase(Locale.ROOT);
-		for (int i = 0; i < normalizedPrefix.length(); i++) {
-			if (Character.digit(normalizedPrefix.charAt(i), 16) == -1) {
+		for (int i = 0; i < prefix.length(); i++) {
+			if (!HexFormat.isHexDigit(prefix.charAt(i))) {
 				throw new IllegalArgumentException(
 						"Hash file name must be a hexadecimal SHA-1 prefix: "
 								+ inputFile);
 			}
 		}
-		return normalizedPrefix;
+		return prefix.toUpperCase(Locale.ROOT);
 	}
 
 	private record HashFile(Path path, String prefix) {

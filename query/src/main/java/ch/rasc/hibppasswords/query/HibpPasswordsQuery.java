@@ -21,7 +21,6 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
@@ -195,33 +194,22 @@ public final class HibpPasswordsQuery {
 			Store store = openPasswordsStore(environment, txn);
 			try (Cursor cursor = store.openCursor(txn)) {
 
-				String padded = hashPrefix + "0".repeat(40 - hashPrefix.length());
-				byte[] keyBytes = hexStringToByteArray(padded);
-				ByteIterable key = new ArrayByteIterable(keyBytes);
-				final ByteIterable v = cursor.getSearchKeyRange(key);
-				if (v != null) {
-					byte[] unsafeBytes = cursor.getKey().getBytesUnsafe();
-					String hex = bytesToHex(
-							Arrays.copyOf(unsafeBytes, cursor.getKey().getLength()));
-
-					if (hex.startsWith(hashPrefix)) {
-						queryResult.add(new RangeQueryResult(hex.substring(5),
-								IntegerBinding.compressedEntryToInt(cursor.getValue())));
-
-						while (cursor.getNext()) {
-							unsafeBytes = cursor.getKey().getBytesUnsafe();
-							hex = bytesToHex(Arrays.copyOf(unsafeBytes,
-									cursor.getKey().getLength()));
-							if (hex.startsWith(hashPrefix)) {
-								queryResult.add(new RangeQueryResult(hex.substring(5),
-										IntegerBinding.compressedEntryToInt(
-												cursor.getValue())));
-							}
-							else {
-								break;
-							}
+				byte[] prefixBytes = HEX_FORMAT.parseHex(hashPrefix + "0");
+				if (cursor.getSearchKeyRange(new ArrayByteIterable(prefixBytes)) != null) {
+					do {
+						ByteIterable key = cursor.getKey();
+						byte[] bytes = key.getBytesUnsafe();
+						// Five hex characters occupy two bytes and the high nibble of a third.
+						if (key.getLength() != 20 || bytes[0] != prefixBytes[0]
+								|| bytes[1] != prefixBytes[1]
+								|| (bytes[2] & 0xf0) != (prefixBytes[2] & 0xff)) {
+							break;
 						}
-					}
+						String suffix = HEX_FORMAT.toLowHexDigit(bytes[2])
+								+ HEX_FORMAT.formatHex(bytes, 3, 20);
+						queryResult.add(new RangeQueryResult(suffix,
+								IntegerBinding.compressedEntryToInt(cursor.getValue())));
+					} while (cursor.getNext());
 				}
 			}
 
@@ -250,13 +238,8 @@ public final class HibpPasswordsQuery {
 		Environment environment = Environments.newInstance(normalizedDirectory.toFile(),
 				config);
 		try {
-			boolean storeExists = environment.computeInReadonlyTransaction(
-					txn -> environment.storeExists(PASSWORDS_STORE, txn));
-			if (!storeExists) {
-				throw new IllegalArgumentException(
-						"Directory does not contain an HIBP passwords database: "
-								+ normalizedDirectory);
-			}
+			environment.executeInReadonlyTransaction(
+					txn -> openPasswordsStore(environment, txn));
 			return environment;
 		}
 		catch (RuntimeException e) {
@@ -267,6 +250,10 @@ public final class HibpPasswordsQuery {
 
 	private static Store openPasswordsStore(Environment environment,
 			Transaction transaction) {
+		if (environment.storeExists("import-in-progress", transaction)) {
+			throw new IllegalArgumentException(
+					"HIBP database import is incomplete; import again into an empty directory");
+		}
 		if (!environment.storeExists(PASSWORDS_STORE, transaction)) {
 			throw new IllegalArgumentException(
 					"Xodus environment does not contain an HIBP passwords store");
@@ -290,21 +277,16 @@ public final class HibpPasswordsQuery {
 					"The method expects the " + label + " as parameter");
 		}
 
-		String upperCaseValue = value.toUpperCase(Locale.ROOT);
-		for (int i = 0; i < upperCaseValue.length(); i++) {
-			if (Character.digit(upperCaseValue.charAt(i), 16) == -1) {
+		for (int i = 0; i < value.length(); i++) {
+			if (!HexFormat.isHexDigit(value.charAt(i))) {
 				throw new IllegalArgumentException(label + " must contain only hex digits");
 			}
 		}
-		return upperCaseValue;
+		return value.toUpperCase(Locale.ROOT);
 	}
 
 	static byte[] hexStringToByteArray(String s) {
 		return HEX_FORMAT.parseHex(s);
-	}
-
-	private static String bytesToHex(byte[] bytes) {
-		return HEX_FORMAT.formatHex(bytes);
 	}
 
 	public static Function<RangeQueryResult, String> stringResultMapper() {

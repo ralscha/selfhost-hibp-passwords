@@ -16,10 +16,14 @@
 package ch.rasc.hibppasswords;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.util.HexFormat;
 
 import org.junit.jupiter.api.AfterEach;
@@ -27,6 +31,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.LoggerFactory;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -58,8 +64,9 @@ class ApplicationTest {
 	}
 
 	@BeforeEach
-	void setUp() {
+	void setUp() throws Exception {
 		Path database = this.tempDirectory.resolve("database");
+		MessageDigest digest = MessageDigest.getInstance("SHA-1");
 		try (Environment environment = Environments.newInstance(database.toFile())) {
 			environment.executeInTransaction(transaction -> {
 				Store store = environment.openStore("passwords",
@@ -67,6 +74,11 @@ class ApplicationTest {
 				store.put(transaction,
 						new ArrayByteIterable(HexFormat.of().parseHex(PASSWORD_HASH)),
 						IntegerBinding.intToCompressedEntry(42));
+				for (String password : new String[] { "", " p\u00e4ss/word?\n" }) {
+					store.put(transaction, new ArrayByteIterable(
+							digest.digest(password.getBytes(StandardCharsets.UTF_8))),
+							IntegerBinding.intToCompressedEntry(7));
+				}
 			});
 		}
 
@@ -84,10 +96,12 @@ class ApplicationTest {
 	@Test
 	void preservesPlainAndSha1GetEndpoints() throws Exception {
 		this.mockMvc.perform(get("/plain/123456"))
-				.andExpect(status().isOk()).andExpect(content().string("42"));
+				.andExpect(status().isOk()).andExpect(content().string("42"))
+				.andExpect(header().string("Cache-Control", "no-store"));
 
 		this.mockMvc.perform(get("/sha1/" + PASSWORD_HASH))
-				.andExpect(status().isOk()).andExpect(content().string("42"));
+				.andExpect(status().isOk()).andExpect(content().string("42"))
+				.andExpect(header().string("Cache-Control", "no-store"));
 	}
 
 	@Test
@@ -102,6 +116,37 @@ class ApplicationTest {
 				.andExpect(status().isBadRequest())
 				.andExpect(content().string(
 						"The method expects the SHA-1 hash as parameter"));
+	}
+
+	@Test
+	void acceptsPlaintextPost() throws Exception {
+		this.mockMvc.perform(post("/plain").contentType("text/plain").content("123456"))
+				.andExpect(status().isOk()).andExpect(content().string("42"))
+				.andExpect(header().string("Cache-Control", "no-store"));
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "", " p\u00e4ss/word?\n" })
+	void plaintextPostPreservesEmptyPasswordsWhitespaceAndUtf8(String password) throws Exception {
+		this.mockMvc.perform(post("/plain").contentType("text/plain")
+				.content(password.getBytes(StandardCharsets.UTF_8)))
+				.andExpect(status().isOk()).andExpect(content().string("7"));
+	}
+
+	@Test
+	void missingPasswordsReturnZeroAndMissingRangesReturnEmptyBody() throws Exception {
+		this.mockMvc.perform(post("/plain").contentType("text/plain").content("absent"))
+				.andExpect(status().isOk()).andExpect(content().string("0"));
+		this.mockMvc.perform(get("/sha1/" + "0".repeat(40)))
+				.andExpect(status().isOk()).andExpect(content().string("0"));
+		this.mockMvc.perform(get("/range/FFFFF"))
+				.andExpect(status().isOk()).andExpect(content().string(""));
+	}
+
+	@Test
+	void invalidRangeReturnsBadRequest() throws Exception {
+		this.mockMvc.perform(get("/range/xyz12"))
+				.andExpect(status().isBadRequest());
 	}
 
 }

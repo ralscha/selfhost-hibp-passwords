@@ -103,10 +103,15 @@
             <path>
               <groupId>com.google.errorprone</groupId>
               <artifactId>error_prone_core</artifactId>
-              <version>2.50.0</version>
+              <version>2.51.0</version>
             </path>
           </annotationProcessorPaths>
         </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.6.1</version>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -121,6 +126,7 @@
             <configuration>
               <createDependencyReducedPom>false</createDependencyReducedPom>
               <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                   <mainClass>ch.rasc.hibppasswords.importer.HibpPasswordsImporter</mainClass>
                 </transformer>
@@ -135,24 +141,28 @@
         <artifactId>license-maven-plugin</artifactId>
         <version>5.1.2</version>
         <configuration>
-          <header>${basedir}/../config/header.txt</header>
-          <properties>
-            <year>${project.inceptionYear}</year>
-          </properties>
-          <excludes>
-            <exclude>**/*.xml</exclude>
-            <exclude>**/*.md</exclude>
-            <exclude>**/*.py</exclude>
-            <exclude>LICENSE</exclude>
-            <exclude>.travis.yml</exclude>
-            <exclude>**/.gitignore</exclude>
-            <exclude>.factorypath</exclude>
-            <exclude>.mvn/**/*</exclude>
-            <exclude>mvnw.cmd</exclude>
-            <exclude>mvnw</exclude>
-            <exclude>.apt_generated/**</exclude>
-            <exclude>.editorconfig</exclude>
-          </excludes>
+          <licenseSets>
+            <licenseSet>
+              <header>${basedir}/../config/header.txt</header>
+              <properties>
+                <year>${project.inceptionYear}</year>
+              </properties>
+              <excludes>
+                <exclude>**/*.xml</exclude>
+                <exclude>**/*.md</exclude>
+                <exclude>**/*.py</exclude>
+                <exclude>LICENSE</exclude>
+                <exclude>.travis.yml</exclude>
+                <exclude>**/.gitignore</exclude>
+                <exclude>.factorypath</exclude>
+                <exclude>.mvn/**/*</exclude>
+                <exclude>mvnw.cmd</exclude>
+                <exclude>mvnw</exclude>
+                <exclude>.apt_generated/**</exclude>
+                <exclude>.editorconfig</exclude>
+              </excludes>
+            </licenseSet>
+          </licenseSets>
           <strictCheck>true</strictCheck>
         </configuration>
         <executions>
